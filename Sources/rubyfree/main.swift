@@ -29,6 +29,16 @@ let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variable
 statusItem.button?.title = "る"
 
 let menu = NSMenu()
+// S0-1 harness: surface the Accessibility grant state so we can see, after a
+// source-changed rebuild (new cdhash), whether the TCC grant survived.
+let axStatus = NSMenuItem(
+    title: axTrusted ? "アクセシビリティ: 許可済み ✓" : "アクセシビリティ: 未許可 ✗",
+    action: nil,
+    keyEquivalent: ""
+)
+axStatus.isEnabled = false
+menu.addItem(axStatus)
+menu.addItem(.separator())
 menu.addItem(
     withTitle: "Quit rubyfree",
     action: #selector(NSApplication.terminate(_:)),

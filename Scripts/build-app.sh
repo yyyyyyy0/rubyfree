@@ -14,7 +14,16 @@ cd "$ROOT"
 APP_NAME="rubyfree"
 CONFIG="release"
 APP_DIR="$ROOT/${APP_NAME}.app"
-SIGN_IDENTITY="${RUBYFREE_SIGN_IDENTITY:--}"   # default ad-hoc "-"; override for self-signed cert
+# Signing identity. S0-1 confirmed a stable self-signed cert ("rubyfree-dev") keeps the
+# TCC grant across rebuilds, while ad-hoc ("-") resets it every build (cdhash-based DR).
+# Prefer the dev cert when present; fall back to ad-hoc (e.g. CI, which builds Core only).
+if [ -n "${RUBYFREE_SIGN_IDENTITY:-}" ]; then
+    SIGN_IDENTITY="$RUBYFREE_SIGN_IDENTITY"
+elif security find-certificate -c rubyfree-dev >/dev/null 2>&1; then
+    SIGN_IDENTITY="rubyfree-dev"
+else
+    SIGN_IDENTITY="-"
+fi
 
 echo "==> swift build -c $CONFIG"
 swift build -c "$CONFIG"

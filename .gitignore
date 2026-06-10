@@ -14,3 +14,6 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# S0 throwaway spikes (results recorded in issues, code is disposable)
+/Spikes/

@@ -53,6 +53,16 @@ cd rubyfree
 - `RubyfreeSystem` — OS 境界ラッパ（AX / ScreenCaptureKit / Vision / 入力監視）
 - `rubyfree` — AppKit メニューバー常駐エグゼキュータブル（composition root）
 
+### 初回セットアップ（開発者）
+
+アクセシビリティ権限はコード署名アイデンティティに紐づくため、リビルドのたびに権限が失われないよう**安定した自己署名証明書**で署名します（アドホック署名はcdhashが変わるたびにTCC権限がリセットされることをS0-1で実証）。初回に一度だけ実行してください:
+
+```sh
+./Scripts/setup-dev-cert.sh   # 自己署名証明書 rubyfree-dev を login keychain に作成
+```
+
+以降 `build-app.sh` / `run-dev.sh` はこの証明書で自動署名します（証明書が無い環境ではアドホックにフォールバック）。
+
 ### コマンド
 
 ```sh
