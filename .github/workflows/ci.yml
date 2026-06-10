@@ -43,8 +43,6 @@ jobs:
           fi
 
       - name: Core coverage gate
-        # M1 skeleton has trivial Core code; gate is informational (min 0) until M2
-        # introduces real domain logic, at which point this becomes 80.
         env:
-          RUBYFREE_COV_MIN: "0"
+          RUBYFREE_COV_MIN: "80"
         run: ./Scripts/coverage.sh
