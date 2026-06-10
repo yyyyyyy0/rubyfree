@@ -1,43 +1,50 @@
-// rubyfree — menu-bar agent executable (composition root).
+// rubyfree — menu-bar agent executable (composition root entry point).
 //
-// M1 skeleton: brings up an LSUIElement agent with a status item and requests
-// Accessibility, so signing / TCC-subject stability can be validated end to end
-// (this is the harness the S0-1 spike runs against). Full wiring (HoverReducer →
-// AppState → TextCaptureStrategy → overlay) lands in M3/M4.
+// Wires the hover→capture→analyze→compose→overlay pipeline. Set RUBYFREE_FAKE_CAPTURE
+// to exercise the whole pipeline without Accessibility (FakeTextCapture returns fixed
+// text), which is how the state machine / overlay are tested without granting permissions.
+// The full menu-bar UX and permission flow land in M4.
 
 import AppKit
-import ApplicationServices
+import RubyfreeCore
+import RubyfreeSystem
 
 let app = NSApplication.shared
-// Agent app: no Dock icon, no app menu (mirrors LSUIElement in the .app bundle).
-app.setActivationPolicy(.accessory)
+app.setActivationPolicy(.accessory)  // agent app: no Dock icon
 
-// Request Accessibility (prompts on first run). Required for AX text capture and
-// the basis of S0-1 (does the TCC grant survive a rebuild?).
-// Use the literal key value: the SDK's `kAXTrustedCheckOptionPrompt` global is not
-// concurrency-safe under Swift 6, and the constant's value is a stable public API string.
-let axTrusted = AXIsProcessTrustedWithOptions(
-    ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+let permissions = AXPermissionChecker()
+permissions.requestAccessibility()
+
+let useFake = ProcessInfo.processInfo.environment["RUBYFREE_FAKE_CAPTURE"] != nil
+let capture: any TextCapturing = useFake ? FakeTextCapture() : AXTextCapture()
+let secureDetector: any SecureFieldDetecting = useFake ? NoSecureFieldDetector() : AXSecureFieldDetector()
+
+let coordinator = AppCoordinator(
+    monitor: PollingMouseMonitor(),
+    capture: capture,
+    secureDetector: secureDetector,
+    analyzer: StandardAnalyzer(),
+    overlay: OverlayWindowController(),
+    permissions: permissions
 )
+coordinator.start()
 
-#if DEBUG
-// Status/diagnostic only — never log captured user text (see PRIVACY.md / dev rules).
-NSLog("rubyfree skeleton launched; accessibility trusted=\(axTrusted)")
-#endif
-
+// Minimal status item (full menu in M4).
 let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 statusItem.button?.title = "る"
 
 let menu = NSMenu()
-// S0-1 harness: surface the Accessibility grant state so we can see, after a
-// source-changed rebuild (new cdhash), whether the TCC grant survived.
 let axStatus = NSMenuItem(
-    title: axTrusted ? "アクセシビリティ: 許可済み ✓" : "アクセシビリティ: 未許可 ✗",
-    action: nil,
-    keyEquivalent: ""
+    title: permissions.current().accessibility ? "アクセシビリティ: 許可済み ✓" : "アクセシビリティ: 未許可 ✗",
+    action: nil, keyEquivalent: ""
 )
 axStatus.isEnabled = false
 menu.addItem(axStatus)
+if useFake {
+    let fake = NSMenuItem(title: "（FAKE_CAPTURE モード）", action: nil, keyEquivalent: "")
+    fake.isEnabled = false
+    menu.addItem(fake)
+}
 menu.addItem(.separator())
 menu.addItem(
     withTitle: "Quit rubyfree",
