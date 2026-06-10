@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Hardened Runtime entitlements — intentionally MINIMAL.
+
+  Deliberately NOT present (and must never be added):
+    * com.apple.security.network.client
+        Keeping this absent is a second line of defence for the non-communication
+        guarantee. (Note: without App Sandbox this does not hard-block sockets, but its
+        absence is asserted by Scripts/audit-binary.sh.)
+    * com.apple.security.cs.disable-library-validation
+        Absence keeps library validation ON, preventing unsigned dylib injection that
+        could bypass the non-communication guards.
+
+  App Sandbox is intentionally NOT used: it would block Accessibility requests to other
+  apps, which is rubyfree's core capability. We ship non-sandboxed + Hardened Runtime.
+-->
+<plist version="1.0">
+<dict/>
+</plist>

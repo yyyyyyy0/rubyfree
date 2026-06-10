@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least privilege: this workflow only needs to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core:
+    # RubyfreeCore is pure logic; App/System layers use macOS 26-only APIs and are
+    # verified locally via Scripts/pre-push.sh. Requires a macOS 26 SDK runner.
+    runs-on: macos-26
+    steps:
+      # actions/checkout v4.2.2 pinned by commit SHA (supply-chain hardening).
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build
+        run: swift build
+
+      - name: Core tests
+        run: swift run RubyfreeCoreTests
+
+      - name: System tests
+        run: swift run RubyfreeSystemTests
+
+      - name: Network source guard
+        run: |
+          if grep -REn 'URLSession|import Network|CFSocket|NWConnection|getaddrinfo' Sources/; then
+            echo "::error::networking API found in Sources/"; exit 1
+          fi
+
+      - name: Core coverage gate
+        # M1 skeleton has trivial Core code; gate is informational (min 0) until M2
+        # introduces real domain logic, at which point this becomes 80.
+        env:
+          RUBYFREE_COV_MIN: "0"
+        run: ./Scripts/coverage.sh

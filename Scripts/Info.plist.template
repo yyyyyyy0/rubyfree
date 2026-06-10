@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleExecutable</key>
+    <string>rubyfree</string>
+    <!-- Fixed bundle id: TCC binds permissions to this. Never change it (would reset grants). -->
+    <key>CFBundleIdentifier</key>
+    <string>io.github.yyyyyyy0.rubyfree</string>
+    <key>CFBundleName</key>
+    <string>rubyfree</string>
+    <key>CFBundleDisplayName</key>
+    <string>rubyfree</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.1</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <!-- Agent app: no Dock icon, no app menu. -->
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 yyyyyyy0. MIT License.</string>
+</dict>
+</plist>

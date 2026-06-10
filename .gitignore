@@ -1,0 +1,16 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Built app bundle (produced by Scripts/build-app.sh)
+*.app
+/dist/
+
+# Xcode (not used, but guard against stray files)
+*.xcodeproj
+*.xcworkspace
+*.dSYM
+
+# macOS
+.DS_Store
