@@ -101,4 +101,29 @@ func testRubyAttributedBuilder(_ t: TinyTest) {
         kCTRubyAnnotationAttributeName as NSAttributedString.Key, at: loc2, effectiveRange: &r2)
     t.expectTrue(a1 != nil, "ruby annotation must be set on '私'")
     t.expectTrue(a2 != nil, "ruby annotation must be set on '学校'")
+
+    // ------------------------------------------------------------------
+    // 5. Multiple readings: joined by '／', capped at style.maxReadings (default 3).
+    //    Read the actual ruby text back out of the CTRubyAnnotation.
+    // ------------------------------------------------------------------
+    func rubyText(_ s: NSAttributedString, at loc: Int) -> String? {
+        guard let attr = s.attribute(kCTRubyAnnotationAttributeName as NSAttributedString.Key,
+                                     at: loc, effectiveRange: nil) else { return nil }
+        let annotation = attr as! CTRubyAnnotation
+        return CTRubyAnnotationGetTextForPosition(annotation, .before) as String?
+    }
+
+    // Single reading → no separator.
+    let single = builder.build([RubyRun(base: "海月", ruby: "くらげ")])
+    t.expectEqual(rubyText(single, at: 0), "くらげ")
+
+    // Four readings, default cap 3 → only the first three shown, '／'-joined.
+    let many = builder.build([RubyRun(base: "山茶花", ruby: "さざんか",
+                                      alternatives: ["さんざか", "さんさか", "さんちゃか"])])
+    t.expectEqual(rubyText(many, at: 0), "さざんか／さんざか／さんさか")
+
+    // A larger cap shows more; a cap of 1 collapses to the primary only.
+    let wide = builder.build([RubyRun(base: "角", ruby: "かど", alternatives: ["つの", "すみ"])],
+                             style: RubyStyle(maxReadings: 1))
+    t.expectEqual(rubyText(wide, at: 0), "かど")
 }

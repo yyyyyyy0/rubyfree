@@ -14,9 +14,18 @@ APP="$INSTALL_DIR/rubyfree.app"
 
 "$ROOT/Scripts/build-app.sh"
 
+# Terminate any running instance first. `open` would otherwise just re-activate the
+# already-running (stale) process instead of launching the freshly built binary, which
+# silently hides the changes you just built.
+if pgrep -f "rubyfree.app/Contents/MacOS/rubyfree" >/dev/null 2>&1; then
+    echo "==> terminating running instance"
+    pkill -f "rubyfree.app/Contents/MacOS/rubyfree" || true
+    sleep 1
+fi
+
 mkdir -p "$INSTALL_DIR"
 rm -rf "$APP"
 cp -R "$ROOT/rubyfree.app" "$APP"
 
 echo "==> launching $APP"
-open "$APP"
+open -n "$APP"

@@ -27,6 +27,10 @@ public struct RubyStyle: Sendable {
     /// Extra vertical gap (points) lifted between the ruby gloss and the base glyphs so
     /// the furigana doesn't visually touch the kanji.
     public let rubyGap: CGFloat
+    /// Maximum number of readings shown per word (primary + alternatives). Caps the ruby
+    /// width so a many-reading word (e.g. 山茶花 has 4) stays legible and doesn't blow out
+    /// the chip; surplus readings are dropped from the display only, not the model.
+    public let maxReadings: Int
 
     public init(
         fontSize: CGFloat = 22,
@@ -35,7 +39,8 @@ public struct RubyStyle: Sendable {
         rubyColor: CGColor = CGColor(red: 1.0, green: 0.82, blue: 0.30, alpha: 1.0),
         uncertainColor: CGColor = CGColor(red: 0.70, green: 0.62, blue: 0.40, alpha: 1.0),
         rubyScale: CGFloat = 0.6,
-        rubyGap: CGFloat = 3
+        rubyGap: CGFloat = 3,
+        maxReadings: Int = 3
     ) {
         self.fontSize = fontSize
         self.fontName = fontName
@@ -44,6 +49,7 @@ public struct RubyStyle: Sendable {
         self.uncertainColor = uncertainColor
         self.rubyScale = rubyScale
         self.rubyGap = rubyGap
+        self.maxReadings = max(1, maxReadings)
     }
 }
 
@@ -84,19 +90,19 @@ public struct RubyAttributedBuilder: Sendable {
             // Build the CTRubyAnnotation for this run.
             // We use CTRubyAnnotationCreateWithAttributes so we can supply a
             // dedicated ruby font; the ruby text goes in the .before (above) slot.
-            // When a word has several known readings, show them all joined by a
-            // full-width slash so the learner sees the full set rather than one guess:
-            //   角 → かど／つの
-            let rubyString: String
-            if run.alternatives.isEmpty {
-                rubyString = run.ruby
-            } else {
-                rubyString = ([run.ruby] + run.alternatives).joined(separator: "／")
-            }
+            // When a word has several known readings, show them (up to maxReadings)
+            // joined by a full-width slash so the learner sees the set rather than one
+            // guess: 角 → かど／つの
+            let rubyString = ([run.ruby] + run.alternatives)
+                .prefix(style.maxReadings)
+                .joined(separator: "／")
             let rubyText = rubyString as CFString
             let rubyAttr = CTRubyAnnotationCreateWithAttributes(
                 .auto,          // alignment
-                .auto,          // overhang
+                // No overhang: a wide multi-reading gloss must not spill over the adjacent
+                // run/kanji (that overlap was the "複数読みが一部被る" bug). With .none the
+                // base advance widens to fit the ruby instead of overhanging neighbours.
+                .none,          // overhang
                 .before,        // position: above the base
                 rubyText,
                 [
