@@ -25,11 +25,13 @@ rubyfree = マウスホバーで画面上の漢字にふりがな（ルビ）を
 - **生成TSVをリポジトリにコミット**（クリーン環境でダウンロード無しにビルド可能＝再現性/オフライン優先。容量はユーザー許容）。
 
 ## 4. 次にやること（Next）— 実機評価で出た残課題
-1. **チップが消えないケースの修正**（最優先・根因特定済）。現象: 文字→空白へ移動・静止後にたまにチップが残る。根因: ①`AppCoordinator.handleMoved` が移動時に `captureTask` を**キャンセルせず** `generation` も上げないため、旧位置のキャプチャがカーソル離脱後に `present` してしまう ②`captureFailed` 経路で `overlay.hide()` を**呼ばない**ため残留チップが次の移動まで消えない。修正案: 移動時に `captureTask?.cancel()` + `generation` バンプ + 無条件 `overlay.hide()`、および fail 経路でも hide。完了条件: 文字→空白移動でチップが確実に消える（手動確認）。
-2. **複数読みの「一部被る」修正**（2語以上のとき）。仮説: 完全一致重複は `allReadings` で除去済だが、**幅の広いルビ（`主／代／…`）が CTRubyAnnotation の overhang で隣接ラン/漢字へはみ出して重なる**。修正案: ルビ overhang を `.none` 化／ラン区切り(U+2009)を広げる／表示候補を上限2に絞る or 多いとき縮小。完了条件: 隣接語・複数読みでルビが重ならない。
-3. **読み正答率の改善**（Wikipedia難読漢字で「まちまち」）。仮説: ①捕捉スパンが辞書見出しと不一致（AX語拡張/OCR箱が余計なかな込み・複合語を分割）②JMdictの第1読みが当該surfaceの常用読みと限らない（出現順≠頻度順）③熟字訓×送り仮名。次の一手: `RUBYFREE_DEBUG` で `captured.text` と採用読みをログ化し**失敗例を具体収集**してから調整（盲目的修正は避ける）。完了条件: 収集した失敗例セットで正答率が目に見えて改善。
-4. **セキュアフィールド非表示の実機確認**（M3残）。完了条件: パスワード欄ホバーで何も出ない → **issue #9 close**。
-5. (任意)テーマ/カラーパレット選択のbacklog化。M4着手(issue#10): メニュー拡充・PermissionsManager・Settings永続化。
+1. **複数読みの「一部被る」修正**（2語以上のとき）。仮説: 完全一致重複は `allReadings` で除去済だが、**幅の広いルビ（`主／代／…`）が CTRubyAnnotation の overhang で隣接ラン/漢字へはみ出して重なる**。修正案: ルビ overhang を `.none` 化／ラン区切り(U+2009)を広げる／表示候補を上限2に絞る or 多いとき縮小。完了条件: 隣接語・複数読みでルビが重ならない。
+2. **読み正答率の改善**（Wikipedia難読漢字で「まちまち」）。仮説: ①捕捉スパンが辞書見出しと不一致（AX語拡張/OCR箱が余計なかな込み・複合語を分割）②JMdictの第1読みが当該surfaceの常用読みと限らない（出現順≠頻度順）③熟字訓×送り仮名。次の一手: `RUBYFREE_DEBUG` で `captured.text` と採用読みをログ化し**失敗例を具体収集**してから調整（盲目的修正は避ける）。完了条件: 収集した失敗例セットで正答率が目に見えて改善。
+3. **セキュアフィールド非表示の実機確認**（M3残）。完了条件: パスワード欄ホバーで何も出ない → **issue #9 close**。
+4. (任意)テーマ/カラーパレット選択のbacklog化。M4着手(issue#10): メニュー拡充・PermissionsManager・Settings永続化。
+
+### 解決済み（Resolved）
+- **チップ残留**（実機「よさげ」確認済）。`AppCoordinator.handleMoved` で移動時に `captureTask?.cancel()` + `generation` バンプ + 無条件 `overlay.hide()`、`failCapture` でも hide、セキュア欄抑止も `failCapture` 経由に統一。旧位置キャプチャの遅延表示と fail 時の残留を根絶。
 
 ## 5. 罠・注意点（Pitfalls）
 - **辞書はバンドルリソース**。`Bundle.module` 解決のため `build-app.sh` が `*.bundle` を `Contents/Resources/` にコピー必須（漏れると静かに `StandardAnalyzer` へ degrade、debugログで判別可）。生成TSVを更新したら `swift Scripts/build-dict.swift .dict-cache/JMdict_e.xml .dict-cache/kanjidic2.xml Sources/RubyfreeCore/Resources` を再実行。
@@ -59,6 +61,7 @@ rubyfree = マウスホバーで画面上の漢字にふりがな（ルビ）を
 - Issues(open): #5(S0-5機内), #6(S0-6 AX実態), #9(M3 セキュア欄確認のみ残), #10(M4), #11(M5一部前倒し済), #12(M6)。
 
 ## Changelog
+- 2026-06-11: チップ残留バグ修正（移動時の捕捉キャンセル+generation更新+無条件hide、fail経路hide）。実機「よさげ」確認。
 - 2026-06-11: 読み解析をJMdict/kanjidic2辞書ベースへ刷新＋複数読み表示。純Swift・非通信維持・再現可能生成。Core 153+1緑/97.45%。実機評価「まあまあ」、残課題3件（チップ残留/ルビ重なり/正答率）をNextに記録。
 - 2026-06-11: M3を実動状態へ（座標バグ修正・AX単語抽出・OCRフォールバック・オーバーレイ刷新）。`ed2fd2d` push・CI green。
 - 2026-06-10: M3 AXパイプライン+オーバーレイ コア実装（Fake E2E成功）。

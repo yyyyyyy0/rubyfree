@@ -71,10 +71,21 @@ final class AppCoordinator {
         // A no-op (sub-minMovement jitter) keeps the current overlay; only real movement
         // dismisses it and re-arms the settle timer.
         guard !effects.isEmpty else { return }
+
+        // Real movement invalidates anything tied to the previous cursor position:
+        //   • bump `generation` so a still-running capture's late `present` is dropped,
+        //   • cancel that capture task so it never even reaches `present`,
+        //   • hide unconditionally so a visible chip clears even if state isn't `.showing`.
+        // Without this, a capture that started over a word could finish *after* the cursor
+        // left onto empty space and stopped — re-showing a chip with nothing to dismiss it
+        // (the "chip won't disappear" bug).
+        generation += 1
+        captureTask?.cancel()
+        captureTask = nil
         if case .showing = appState {
             appState = stateReducer.reduce(appState, .cursorMoved)
-            overlay.hide()
         }
+        overlay.hide()
         apply(effects)
     }
 
@@ -121,7 +132,7 @@ final class AppCoordinator {
         // Hard privacy rule: never read secure (password) fields.
         if secureDetector.isSecureField(at: point) {
             DebugLog.log("settle: secure field → suppress")
-            appState = stateReducer.reduce(appState, .captureFailed(generation: gen))
+            failCapture(gen)
             return
         }
 
@@ -149,5 +160,8 @@ final class AppCoordinator {
 
     private func failCapture(_ gen: Int) {
         appState = stateReducer.reduce(appState, .captureFailed(generation: gen))
+        // A settle that finds no glossable text (empty/non-kanji/secure) must leave the
+        // screen clean — hide any chip still up from a previous word.
+        overlay.hide()
     }
 }
