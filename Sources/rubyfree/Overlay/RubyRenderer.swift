@@ -1,4 +1,5 @@
 import AppKit
+import RubyfreeCore
 
 // MARK: - RubyRenderer
 
@@ -9,6 +10,8 @@ import AppKit
 /// Sizing:
 ///   - `fittingSizeForAttributed` reports the rectangle the caller should give the
 ///     panel: text.size() + horizontal padding + vertical padding + ruby headroom.
+///   - Ruby headroom (`vPadTop`) is derived from `RubyStyle` so a large font size
+///     (e.g. 32 pt) does not clip the furigana glyphs at the top edge of the chip.
 ///
 /// Appearance:
 ///   - Background tracks the effective appearance (dark / light) through
@@ -23,16 +26,32 @@ final class RubyRenderer: NSView {
     private static let hPad: CGFloat = 12
     /// Padding below the text baseline to the panel bottom.
     private static let vPadBottom: CGFloat = 8
-    /// Padding above the text top to the panel top.  Extra space lets ruby glyphs
-    /// (plus the lifted ruby gap) sit fully inside the panel.
-    private static let vPadTop: CGFloat = 26
+    /// Extra safety margin added on top of the computed ruby height to account for
+    /// sub-pixel rounding and ensure glyphs never clip at the chip's top edge.
+    private static let vPadTopMargin: CGFloat = 4
     /// Corner radius for the backdrop rectangle.
     private static let cornerRadius: CGFloat = 8
 
     // MARK: State
 
+    /// Computed headroom above the body text for ruby glyphs. Updated by
+    /// `updateStyle(_:)` whenever the active `RubyStyle` changes. Defaults to
+    /// the previous fixed value (26 pt) so the renderer is correct before the
+    /// coordinator pushes the first style on start-up.
+    private var vPadTop: CGFloat = 26
+
     var attributed: NSAttributedString? {
         didSet { needsDisplay = true }
+    }
+
+    /// Push the current ``RubyStyle`` so the renderer can compute the ruby headroom
+    /// (`vPadTop`) from first principles: `fontSize × rubyScale + rubyGap + margin`.
+    /// Call this whenever the style changes (font size or theme); triggers a redraw.
+    func updateStyle(_ style: RubyStyle) {
+        let headroom = style.fontSize * style.rubyScale + style.rubyGap + Self.vPadTopMargin
+        guard headroom != vPadTop else { return }
+        vPadTop = headroom
+        needsDisplay = true
     }
 
     /// Fill colour of the backdrop chip. Defaults mirror `RubyTheme.dark`'s chip so the
@@ -71,7 +90,7 @@ final class RubyRenderer: NSView {
         let textSize = attributed.size()
         return NSSize(
             width: textSize.width + Self.hPad * 2,
-            height: textSize.height + Self.vPadBottom + Self.vPadTop
+            height: textSize.height + Self.vPadBottom + vPadTop
         )
     }
 
@@ -100,7 +119,7 @@ final class RubyRenderer: NSView {
 
         // In a flipped view, (hPad, vPadTop) places the text origin at the top-left
         // of the usable area, leaving vPadTop points of headroom above for ruby glyphs.
-        let textOrigin = NSPoint(x: Self.hPad, y: Self.vPadTop)
+        let textOrigin = NSPoint(x: Self.hPad, y: vPadTop)
         let textSize = attributed.size()
         let textRect = NSRect(origin: textOrigin, size: textSize)
         attributed.draw(in: textRect)

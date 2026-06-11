@@ -63,14 +63,20 @@ let coordinator = AppCoordinator(
 )
 coordinator.start()
 
+// Settings window: created once, lazily shown on demand. Held for the process lifetime.
+let settingsWindowController = SettingsWindowController(coordinator: coordinator)
+
 // Menu-bar UI: on/off toggle, live permission status, open-settings shortcuts, quit.
+// The settings window is decoupled from the menu via a closure so MenuController does not
+// import SettingsWindowController (keeps the dependency graph clean).
 // Held for the process lifetime so its target/actions stay valid.
 let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 let menuController = MenuController(
     coordinator: coordinator,
     permissions: permissions,
     statusItem: statusItem,
-    useFake: useFake
+    useFake: useFake,
+    openSettings: { settingsWindowController.showWindow() }
 )
 _ = menuController  // keep alive
 

@@ -148,9 +148,11 @@ final class AppCoordinator {
     }
 
     /// Rebuild ``style`` from the active theme and the persisted font/readings settings.
-    /// Side-effect-free; callers hide the overlay and notify as appropriate.
+    /// Pushes the new style to the overlay so it can update the ruby headroom (`vPadTop`)
+    /// before the next chip is shown. Callers hide the overlay and notify as appropriate.
     private func rebuildStyle() {
         style = theme.makeStyle(fontSize: CGFloat(settings.fontSize), maxReadings: settings.maxReadings)
+        overlay.updateStyle(style)
     }
 
     /// Turn hovering on/off. Persists the preference, drives the state machine, and

@@ -13,4 +13,7 @@ protocol OverlayPresenting: AnyObject {
     /// Apply the selected theme's chip colours to the overlay. Text colours are baked into
     /// the attributed string by the caller; this carries only the chip (background/stroke).
     func applyTheme(_ theme: RubyTheme)
+    /// Push the current ``RubyStyle`` so the renderer can derive the correct ruby headroom
+    /// from `fontSize × rubyScale + rubyGap`. Must be called whenever the style changes.
+    func updateStyle(_ style: RubyStyle)
 }
