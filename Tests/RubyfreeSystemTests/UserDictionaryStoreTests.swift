@@ -53,4 +53,13 @@ func testUserDictionaryStore(_ t: TinyTest) {
 
     // 7. Surviving entries are unaffected by the failed adds.
     t.expectEqual(store.load()["鬼灯"] ?? [], ["ほおずき"])
+
+    // 8. load() re-applies bounds to a hand-edited/tampered file (fail-safe symmetry):
+    //    an over-long surface line is dropped; a valid line survives.
+    let longSurface = String(repeating: "永", count: 20)
+    let tampered = "\(longSurface)\tよ\n正気\tしょうき\n"
+    try? Data(tampered.utf8).write(to: fileURL, options: .atomic)
+    let reloaded = UserDictionaryStore(fileURL: fileURL).load()
+    t.expectTrue(reloaded[longSurface] == nil, "over-long surface dropped on load")
+    t.expectEqual(reloaded["正気"] ?? [], ["しょうき"])
 }

@@ -59,8 +59,18 @@ public final class UserDictionaryStore: UserDictionaryStoring {
 
     public func load() -> [String: [String]] {
         guard let body = try? String(contentsOf: fileURL, encoding: .utf8) else { return [:] }
-        // Reuse the bundled-dictionary parser (skips malformed lines defensively).
-        return ReadingDictionary.parseTSV(body)
+        // Reuse the bundled-dictionary parser (skips malformed lines defensively), then
+        // re-apply the same bounds as `add()`. The file lives in a user-writable location and
+        // may be hand-edited or tampered, so reads enforce the invariants writes do — a
+        // fail-safe symmetric trust boundary (parseTSV already strips tab/comma per field).
+        var out: [String: [String]] = [:]
+        for (surface, readings) in ReadingDictionary.parseTSV(body) where surface.count <= Self.maxSurfaceLength {
+            let valid = readings.filter { $0.count <= Self.maxReadingLength }
+            guard !valid.isEmpty else { continue }
+            out[surface] = valid
+            if out.count >= Self.maxEntries { break }
+        }
+        return out
     }
 
     public var count: Int { load().count }
@@ -77,8 +87,11 @@ public final class UserDictionaryStore: UserDictionaryStoring {
     }
 
     public func remove(surface: String) {
+        // Match the trimming `add` applies to keys so a caller passing an untrimmed string
+        // still hits the stored entry.
+        let key = surface.trimmingCharacters(in: .whitespacesAndNewlines)
         var map = load()
-        guard map.removeValue(forKey: surface) != nil else { return }
+        guard map.removeValue(forKey: key) != nil else { return }
         try? persist(map)
     }
 
