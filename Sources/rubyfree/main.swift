@@ -20,7 +20,12 @@ let useFake = ProcessInfo.processInfo.environment["RUBYFREE_FAKE_CAPTURE"] != ni
 // OCR fallback handles apps where AX cannot localize the word under the cursor
 // (NSTextView/TextEdit, WebKit, PDFs). It needs Screen Recording; request it (JIT) and
 // enable the fallback only once granted — a fresh grant takes effect on next launch.
-let ocrCapture = OCRTextCapture()
+// Prefer the bundled JMdict/kanjidic2 dictionary for accurate, multi-candidate readings.
+// Shared with both capture paths so a kanji run can be extended over okurigana
+// (宛 → 宛も) using dictionary-gated matching.
+let bundledDictionary = ReadingDictionary.bundled()
+
+let ocrCapture = OCRTextCapture(dictionary: bundledDictionary)
 let screenRecordingGranted = permissions.current().screenRecording
 if !useFake && !screenRecordingGranted {
     permissions.requestScreenRecording()
@@ -32,12 +37,12 @@ if ocrEnabled {
 
 let capture: any TextCapturing = useFake
     ? FakeTextCapture()
-    : TextCaptureStrategy(primary: AXTextCapture(), fallback: ocrEnabled ? ocrCapture : nil)
+    : TextCaptureStrategy(primary: AXTextCapture(dictionary: bundledDictionary),
+                          fallback: ocrEnabled ? ocrCapture : nil)
 let secureDetector: any SecureFieldDetecting = useFake ? NoSecureFieldDetector() : AXSecureFieldDetector()
 
-// Prefer the bundled JMdict/kanjidic2 dictionary for accurate, multi-candidate readings;
-// fall back to the CFStringTokenizer-based analyzer only if the resource is missing.
-let bundledDictionary = ReadingDictionary.bundled()
+// Fall back to the CFStringTokenizer-based analyzer only if the dictionary resource is
+// missing.
 let analyzer: any JapaneseAnalyzing = bundledDictionary.map { DictionaryAnalyzer(dictionary: $0) } ?? StandardAnalyzer()
 if let bundledDictionary {
     DebugLog.log("analyzer=DictionaryAnalyzer words=\(bundledDictionary.words.count) kanji=\(bundledDictionary.kanji.count)")

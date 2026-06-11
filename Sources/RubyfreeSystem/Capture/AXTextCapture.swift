@@ -25,7 +25,15 @@ public actor AXTextCapture: TextCapturing {
     /// budget under control when the target app is unresponsive.
     private let axTimeout: Float = 0.2
 
-    public init() {}
+    /// Reading dictionary used only to gate okurigana (送り仮名) expansion of a kanji run —
+    /// the run is extended over trailing kana only when the result is a known word, so a
+    /// following particle (宛＋を) is never swallowed. `nil` disables expansion (the run is
+    /// captured as-is), which is the safe degrade when no dictionary is bundled.
+    private let dictionary: ReadingDictionary?
+
+    public init(dictionary: ReadingDictionary? = nil) {
+        self.dictionary = dictionary
+    }
 
     // MARK: - TextCapturing
 
@@ -165,8 +173,16 @@ public actor AXTextCapture: TextCapturing {
         let indexInWindow = cursor.location - winLoc
         // Prefer the maximal kanji run (keeps 経済学 whole for the dictionary); fall back to
         // the tokenizer word when the cursor isn't on a kanji (e.g. a kana headword).
-        guard let local = KanjiRun.range(in: window, utf16Index: indexInWindow)
-                ?? WordBoundary.wordRange(in: window, utf16Index: indexInWindow) else {
+        let local: CFRange
+        if let run = KanjiRun.range(in: window, utf16Index: indexInWindow) {
+            // Extend the run over trailing okurigana so 宛 → 宛も (あたかも), but only when the
+            // dictionary confirms the extended surface is a real word (never a particle).
+            local = dictionary.map { dict in
+                Okurigana.extend(range: run, in: window, isWord: { dict.words[$0] != nil })
+            } ?? run
+        } else if let word = WordBoundary.wordRange(in: window, utf16Index: indexInWindow) {
+            local = word
+        } else {
             return cursor
         }
         let absolute = CFRange(location: winLoc + local.location, length: local.length)

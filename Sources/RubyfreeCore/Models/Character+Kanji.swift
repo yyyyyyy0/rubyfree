@@ -11,6 +11,18 @@ public extension Character {
     }
 }
 
+public extension Character {
+    /// True if the character is a hiragana letter (the script okurigana is written in).
+    /// Used by ``Okurigana`` to extend a kanji run over trailing 送り仮名.
+    var isHiragana: Bool {
+        guard !unicodeScalars.isEmpty else { return false }
+        // U+3041…U+3096 hiragana letters, plus U+309D…U+309F iteration/digraph marks.
+        return unicodeScalars.allSatisfy { s in
+            (0x3041...0x3096).contains(s.value) || (0x309D...0x309F).contains(s.value)
+        }
+    }
+}
+
 public extension StringProtocol {
     /// True if the string contains at least one kanji character.
     var containsKanji: Bool { contains { $0.isKanji } }

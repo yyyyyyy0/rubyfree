@@ -12,13 +12,17 @@ import RubyfreeCore
 public struct OCRTextCapture: TextCapturing {
 
     private let region = ScreenRegionCapture()
-    private let recognizer = VisionTextRecognizer()
+    private let recognizer: VisionTextRecognizer
 
     /// Logical-point size of the region clipped around the cursor. Kept above the size at
     /// which Vision's detector becomes unstable, while small enough to stay fast.
     private let regionSize = CGSize(width: 280, height: 140)
 
-    public init() {}
+    /// - Parameter dictionary: gates okurigana expansion of recognized kanji runs (宛 → 宛も).
+    ///   `nil` disables expansion.
+    public init(dictionary: ReadingDictionary? = nil) {
+        self.recognizer = VisionTextRecognizer(dictionary: dictionary)
+    }
 
     /// Pay Vision's one-time model load at startup.
     public func prewarm() async { await recognizer.prewarm() }

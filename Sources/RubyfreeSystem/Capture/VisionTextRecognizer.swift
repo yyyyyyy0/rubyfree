@@ -21,6 +21,15 @@ struct OCRWord: Sendable {
 /// stay within the async call tree and the work runs off the main actor.
 struct VisionTextRecognizer {
 
+    /// Reading dictionary used only to gate okurigana (送り仮名) expansion of a kanji run, so
+    /// 宛 grows to 宛も (あたかも) but a following particle is never swallowed. `nil` disables
+    /// expansion (runs are captured as-is).
+    let dictionary: ReadingDictionary?
+
+    init(dictionary: ReadingDictionary? = nil) {
+        self.dictionary = dictionary
+    }
+
     /// Run a throwaway recognition so the first real hover doesn't eat the cold-start cost.
     func prewarm() async {
         let w = 64, h = 64
@@ -52,7 +61,13 @@ struct VisionTextRecognizer {
 
             // Gloss whole kanji runs, not tokenizer words — otherwise a 3+ char compound
             // (経済学) is split (経済 | 学) before the analyzer sees it.
-            for range in KanjiRun.ranges(in: line) {
+            for kanjiRange in KanjiRun.ranges(in: line) {
+                // Extend the run over trailing okurigana (宛 → 宛も) when the dictionary
+                // confirms the extended surface is a real word, so the box and the glossed
+                // text both cover the whole word.
+                let range = dictionary.map { dict in
+                    Okurigana.extend(range: kanjiRange, in: line, isWord: { dict.words[$0] != nil })
+                } ?? kanjiRange
                 guard let rectObs = candidate.boundingBox(for: range) else { continue }
                 let box = rectObs.boundingBox.toImageCoordinates(imageSize, origin: .upperLeft)
                 guard box.width > 0, box.height > 0 else { continue }
