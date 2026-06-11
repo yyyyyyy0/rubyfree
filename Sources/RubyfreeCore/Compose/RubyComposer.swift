@@ -12,9 +12,13 @@ public struct RubyComposer: Sendable {
     public func compose(_ tokens: [AnalyzedToken]) -> [RubyRun] {
         tokens.compactMap { token in
             guard token.containsKanji, let reading = token.reading else { return nil }
+            // Use `allReadings` (primary first, de-duplicated) so the rendered ruby can
+            // never show a repeated gloss like かど／かど even if the source data has dupes.
+            let readings = reading.allReadings
             return RubyRun(
                 base: token.surface,
-                ruby: reading.hiragana,
+                ruby: readings[0],
+                alternatives: Array(readings.dropFirst()),
                 isUncertain: reading.isUncertain
             )
         }

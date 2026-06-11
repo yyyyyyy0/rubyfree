@@ -5,59 +5,60 @@ Updated: 2026-06-11 JST
 rubyfree = マウスホバーで画面上の漢字にふりがな（ルビ）を透明オーバーレイ表示する macOS 常駐ユーティリティ（完全ローカル・非通信・個人開発OSS）。
 
 ## 1. このセッションで完了したこと（Done）
-- **M3を「実際に動く」状態へ**（コミット `ed2fd2d`、push済み・CI green）。実機ホバーで語単位ふりがな表示を確認。
-- **🐛 マルチモニタ座標バグ修正**: AppKit↔AXのY反転を `NSScreen.screens`のunion高さ → **プライマリ画面(origin(0,0))の高さ**基準に変更。プライマリより上下に張り出す副ディスプレイがあると、その張り出し分（開発機で1152px）が全ヒットテストに乗り、座標が大きくズレていた。`AXTextCapture.swift`＋`CoordinateConverter.swift`のdoc修正。
-- **✅ AX単語抽出に刷新** (`AXTextCapture.swift`): `AXRangeForPosition`→カーソルindex→`WordBoundary`(新Core純ロジック, ja_JP語境界)→`AXStringForRange`/`AXBoundsForRange`。不正range（≤0/>64/≒Int64.max のゴミ値）を拒否。**全文AXValueフォールバックを撤廃**（「一行全部出る」の原因だった）。
-- **✅ OCRフォールバック実装** (新規3ファイル): `ScreenRegionCapture`(ScreenCaptureKitで領域キャプチャ) + `VisionTextRecognizer`(`.accurate`/ja+en/プリウォーム/語ボックス選択) + `OCRTextCapture`(TextCapturing)。`main.swift`で`TextCaptureStrategy(primary:AX, fallback:OCR)`に結線、画面収録権限でゲート。
-- **🎨 オーバーレイ刷新**: 黒チップ(#141414/92%/白枠) + **明るいアンバーのふりがな** + 拡大(base22pt/ruby0.6×) + ルビgap(`kCTBaselineOffsetAttributeName`) + カーソル回避(語の10pt上)。不確実な読みはふりがなのみ減光（基底は白で可読維持）。
-- **診断**: `RUBYFREE_DEBUG` 環境変数でstderrログ(`DebugLog.swift`、既定off)。
-- テスト: `WordBoundaryTests`追加。`RubyAttributedBuilderTests`の色コントラクト更新（基底は常にforeground、不確実はrubyで表現）。**Core 124 + System 1 green**。
+- **読み解析を辞書ベースに刷新**（`DictionaryAnalyzer`）。`CFStringTokenizer` の単一読み・難読誤りを脱し、**JMdict 224,686語 + kanjidic2 12,272字** の最長一致解析へ。海月→くらげ、紫陽花→あじさい、向日葵→ひまわり 等が正答。
+- **複数読み表示**: `Reading.alternatives` / `RubyRun.alternatives` を追加し、Composer→Builder で `主／代／…`（全角スラッシュ連結）で複数候補を表示。複数読み語は `isUncertain` で減光。
+- **MeCab を採用せず純Swiftに決定**（理由は Decisions）。**ランタイム完全オフライン維持**（辞書は `Bundle.module` のローカルTSV）。
+- **再現可能な辞書生成**: `Scripts/fetch-dict-sources.sh`（EDRDGからJMdict/kanjidic2を**ビルド時1回だけ**取得→`.dict-cache/`、gitignore）→ `Scripts/build-dict.swift`（XMLParserで漢字見出しのみ抽出・カタカナ→ひらがな正規化・`re_restr`尊重・最大6読み）→ `Sources/RubyfreeCore/Resources/{words,kanji}.tsv`（~7.4MB、コミット済）。
+- **`.app` への辞書同梱**: `Package.swift` に resources 宣言、`build-app.sh` が `*.bundle` を `Contents/Resources/` へコピー。実機 `.app` で辞書ロード確認済（debugログ `analyzer=DictionaryAnalyzer words=224686`）。
+- **ライセンス**: `NOTICE` 追加。コードは MIT、辞書データは EDRDG **CC-BY-SA 4.0** と明記して両立。
+- テスト: `DictionaryAnalyzerTests`（最長一致・複数読み・フォールバック・空辞書防御・TSV往復・**バンドル辞書 end-to-end**）追加。**Core 153 + System 1 green**、カバレッジ **97.45%**、非通信ガード/バイナリ監査PASS。コードレビュー実施（CRITICAL/HIGHなし、指摘#3反映＝レンダラを `allReadings` 経由に）。
 
 ## 2. いまの状態（State）
-- ブランチ `main`、最新 **ed2fd2d**、push済み・未push無し。CI **green**(macos-26, 1m8s)。
-- 実機動作: **AX対応アプリ=AX単語抽出 / TextEdit・Web等=OCRフォールバック**で語単位ふりがな表示を確認済み。座標・チップ表示OK。
-- `~/Applications/rubyfree.app` は最新版で稼働中（パディング入り）。`RUBYFREE_DEBUG=1`の前景バイナリをnohup起動して観測している（ログ `/tmp/rubyfree-debug.log`）。
-- 権限: AX・**画面収録(Screen Recording)** とも付与済み。画面収録は付与後に再起動でOCR有効化される（初回起動セッションでは無効＝再起動が必要）。
-- **既知の品質課題**: ①OCR信頼度0.3が多い（=Vision文字認識の確信度。読みの正誤とは無関係）②難読漢字で読み誤り（標準辞書の限界、下記Decisions）。
+- ブランチ `main`。コミット直後（本セッションのコミットハッシュは `git log` 参照）。
+- `~/Applications/rubyfree.app` は辞書ビルドで稼働中。AX対応アプリ＝AX、TextEdit/Web＝OCRフォールバック、どちらも辞書解析。
+- 権限: AX付与済み。**画面収録は本セッションで再付与プロンプトが出た**（ScreenCaptureKitの「プライベートウインドウピッカーをバイパス」標準プロンプト＝意図通り）。付与後は**要再起動**でOCR有効。音声は一切キャプチャしない（SCのTCCが画面+音声を束ねるだけ）。
+- ユーザー実機評価: 「まあまあ」。速度は良好。**残課題3件**（下記 Next 1–3）。
 
 ## 3. 決定事項（Decisions）
-- **OCR前倒し採用（M5→M3に実装）**: TextEdit(NSTextView)等は `AXRangeForPosition`/`AXBoundsForRange` 非対応で「座標→語」がAX原理的に不可能（属性一覧で実証）。Webは`AXTextMarker`系の別API。汎用の語特定はOCRのみ。実測でOCR `.accurate` warm≈**160ms**・安定、`.fast`は`CRTextDetectorModelV3`が**毎回クラッシュ**するため`.accurate`固定。極小/極端アスペクト比の画像もVisionがクラッシュするため領域は280×140pt以上を確保。
-- **軽量さはクリップ縮小でなくデバウンスで担保**: コスト支配項はVision推論(固定~160ms)で画素数非依存。ホバー静止時1回・actor相当のnonisolated async（off-main）で実行。
-- **キャプチャ系はactor→struct(nonisolated async)**: `SCShareableContent`等が非Sendableでactor境界を越えられないため。nonisolated asyncはMainActorから呼んでもグローバルExecutorで実行されオフメイン維持。
-- **辞書（次の判断、ユーザー未確定）**: 推奨=**MeCab+UniDic導入**（実行時数十μsで軽量、熟字訓含む高精度、`JapaneseAnalyzing`プロトコル背後に差し替え）→第2段でkanjidic2/JMdictにより複数読み表示。ユーザーは「動作が軽量なら容量は気にしない」。**この方向でGoかどうか次セッション冒頭で要確認**。
+- **辞書は純Swift + JMdict/kanjidic2、MeCab+UniDicは不採用**。理由: ①MeCabのC++ソースは `mecab-server`（socket/`getaddrinfo`）を含み**非通信ガード/ハード要件と衝突** ②辞書バイナリのビルドが外部ツール依存で**再現困難** ③C++×Swift6相互運用コスト。純Swiftなら非通信をクリーンに満たし、**複数読み表示**（ユーザー要望）にもJMdictが自然に適合。トレードオフ＝文法コストモデルが無く走り書き文中の語境界精度はMeCab劣後（活用語＝食べた等は単漢字フォールバックになりがち）。実害は小さいと判断（読みの正誤は辞書依存・本アプリは語窓を切出済）。
+- **複数読み語は `isUncertain=true`**（あいまい＝減光表示）。単漢字フォールバックも常に uncertain。
+- **生成TSVをリポジトリにコミット**（クリーン環境でダウンロード無しにビルド可能＝再現性/オフライン優先。容量はユーザー許容）。
 
-## 4. 次にやること（Next）
-1. **辞書方針のGo確認 → MeCab+UniDic を `JapaneseAnalyzing` 実装として導入**。完了条件: 海月→くらげ等の難読が正しく読め、既存パイプライン無改修で差し替わる。
-2. **複数読み表示**: `Reading`を候補リスト化＋composer/builder/renderer対応（kanjidic2 or JMdict）。完了条件: 複数読みを持つ語で候補が並んで表示される。
-3. **セキュアフィールド非表示の実機確認**（M3残）。完了条件: パスワード欄ホバーで何も出ない。確認後 **issue #9 close**。
-4. (任意)**テーマ/カラーパレット選択**のbacklog化（今回未着手、ユーザー要望）。完了条件: issue化 or プラン追記。
-5. **M4着手**(issue#10): メニュー拡充(ON/OFF・権限状態)、PermissionsManager案内+ポーリング、Settings永続化。完了条件: プランM4受入基準 + v0.9自己評価。
+## 4. 次にやること（Next）— 実機評価で出た残課題
+1. **チップが消えないケースの修正**（最優先・根因特定済）。現象: 文字→空白へ移動・静止後にたまにチップが残る。根因: ①`AppCoordinator.handleMoved` が移動時に `captureTask` を**キャンセルせず** `generation` も上げないため、旧位置のキャプチャがカーソル離脱後に `present` してしまう ②`captureFailed` 経路で `overlay.hide()` を**呼ばない**ため残留チップが次の移動まで消えない。修正案: 移動時に `captureTask?.cancel()` + `generation` バンプ + 無条件 `overlay.hide()`、および fail 経路でも hide。完了条件: 文字→空白移動でチップが確実に消える（手動確認）。
+2. **複数読みの「一部被る」修正**（2語以上のとき）。仮説: 完全一致重複は `allReadings` で除去済だが、**幅の広いルビ（`主／代／…`）が CTRubyAnnotation の overhang で隣接ラン/漢字へはみ出して重なる**。修正案: ルビ overhang を `.none` 化／ラン区切り(U+2009)を広げる／表示候補を上限2に絞る or 多いとき縮小。完了条件: 隣接語・複数読みでルビが重ならない。
+3. **読み正答率の改善**（Wikipedia難読漢字で「まちまち」）。仮説: ①捕捉スパンが辞書見出しと不一致（AX語拡張/OCR箱が余計なかな込み・複合語を分割）②JMdictの第1読みが当該surfaceの常用読みと限らない（出現順≠頻度順）③熟字訓×送り仮名。次の一手: `RUBYFREE_DEBUG` で `captured.text` と採用読みをログ化し**失敗例を具体収集**してから調整（盲目的修正は避ける）。完了条件: 収集した失敗例セットで正答率が目に見えて改善。
+4. **セキュアフィールド非表示の実機確認**（M3残）。完了条件: パスワード欄ホバーで何も出ない → **issue #9 close**。
+5. (任意)テーマ/カラーパレット選択のbacklog化。M4着手(issue#10): メニュー拡充・PermissionsManager・Settings永続化。
 
 ## 5. 罠・注意点（Pitfalls）
-- **AXは座標→語マッピングが取れないアプリが多い**（TextEdit/Web）。AX対応は「ネイティブ静的テキスト等」のみ、それ以外はOCR頼み。これは仕様（隠しAX技は無い）。
-- **Vision `.fast` 禁止**（macOS26でクラッシュ）。`.accurate`固定。画像は最小サイズ確保（極小でクラッシュ）。
-- **画面収録権限**: 付与後は再起動が必要（`CGPreflightScreenCaptureAccess()`は起動時評価）。`swift run`バイナリは別TCC主体なので実機確認は固定パス`~/Applications/rubyfree.app`経由（`run-dev.sh` or バンドル内バイナリ直接実行）。
-- **署名**: 自己署名cert `rubyfree-dev` で署名（cdhash非依存DRで権限保持）。`build-app.sh`が自動選択、無ければアドホックfallback(権限リセット注意)。新環境は先に `setup-dev-cert.sh`。
-- **テスト**: `swift test`は動かない。`swift run RubyfreeCoreTests`/`RubyfreeSystemTests`。`expectEqual`はメッセージ引数なし（`expectTrue`はあり）。
+- **辞書はバンドルリソース**。`Bundle.module` 解決のため `build-app.sh` が `*.bundle` を `Contents/Resources/` にコピー必須（漏れると静かに `StandardAnalyzer` へ degrade、debugログで判別可）。生成TSVを更新したら `swift Scripts/build-dict.swift .dict-cache/JMdict_e.xml .dict-cache/kanjidic2.xml Sources/RubyfreeCore/Resources` を再実行。
+- **辞書ソースの再取得は `Scripts/fetch-dict-sources.sh`**（外向き通信はここだけ・ビルド時のみ）。`.dict-cache/` はgitignore。
+- **AXは座標→語マッピング不可なアプリが多い**（TextEdit/Web）→OCR頼み。**Vision `.fast` 禁止**（macOS26クラッシュ）、`.accurate`固定、画像は最小サイズ確保。
+- **画面収録権限**: 付与後は再起動が必要。`swift run`バイナリは別TCC主体なので実機確認は固定パス `~/Applications/rubyfree.app`（`run-dev.sh`）経由。
+- **署名**: 自己署名cert `rubyfree-dev`（cdhash非依存DRで権限保持）。新環境は先に `setup-dev-cert.sh`。
+- **テスト**: `swift test`は不可。`swift run RubyfreeCoreTests`/`RubyfreeSystemTests`。`expectEqual`はメッセージ引数なし。
 - **ファイル削除はtrash**（rmはブロック）。
-- **非通信ガード**: `pre-push.sh`が`URLSession|import Network|CFSocket|NWConnection|getaddrinfo`をgrep。ScreenCaptureKit/Visionは該当せずOK。
+- **非通信ガード**: `pre-push.sh` が `Sources/` を `URLSession|import Network|CFSocket|NWConnection|getaddrinfo` でgrep。
 
 ## 6. 重要リンク・参照（References）
-- リポジトリ: https://github.com/yyyyyyy0/rubyfree （最新 main `ed2fd2d`）
+- リポジトリ: https://github.com/yyyyyyy0/rubyfree
 - プラン(SSOT): `/Users/nil/.claude/plans/polished-hatching-mango.md`
-- プロジェクトメモリ: `/Users/nil/.claude/projects/-Users-nil-src-rubyfree/memory/rubyfree-spec.md`
 - 主要ファイル（今セッション）:
-  - `Sources/RubyfreeSystem/Capture/`(AXTextCapture / ScreenRegionCapture / VisionTextRecognizer / OCRTextCapture / TextCapturing[=TextCaptureStrategy])
-  - `Sources/RubyfreeCore/Analyze/WordBoundary.swift`, `Sources/RubyfreeCore/Ruby/RubyAttributedBuilder.swift`(RubyStyle)
-  - `Sources/rubyfree/Overlay/`(RubyRenderer=黒チップ / OverlayWindowController=配置+gap), `Sources/rubyfree/main.swift`(結線)
-  - `Sources/RubyfreeSystem/DebugLog.swift`
+  - `Sources/RubyfreeCore/Analyze/`(DictionaryAnalyzer / ReadingDictionary / BundledDictionary / JapaneseAnalyzing / StandardAnalyzer[=保険])
+  - `Sources/RubyfreeCore/Models/`(Reading[+alternatives,allReadings] / RubyRun[+alternatives])
+  - `Sources/RubyfreeCore/Compose/RubyComposer.swift`(allReadings経由), `Ruby/RubyAttributedBuilder.swift`(主／代表示)
+  - `Sources/rubyfree/main.swift`(辞書優先・StandardAnalyzerフォールバック・debugログ), `AppCoordinator.swift`(Next#1の修正対象)
+  - `Scripts/`(fetch-dict-sources.sh / build-dict.swift / build-app.sh[resourceコピー])
+  - `Sources/RubyfreeCore/Resources/{words,kanji}.tsv`, `NOTICE`
 - コマンド:
-  - 実機起動: `./Scripts/run-dev.sh`（固定パス配置+open）
+  - 実機起動: `./Scripts/run-dev.sh`
+  - 辞書再生成: `./Scripts/fetch-dict-sources.sh` →（出力された）`swift Scripts/build-dict.swift ...`
   - デバッグ観測: `RUBYFREE_DEBUG=1 nohup ~/Applications/rubyfree.app/Contents/MacOS/rubyfree > /tmp/rubyfree-debug.log 2>&1 &`
   - 検証: `./Scripts/pre-push.sh`（build/tests/非通信ガード/coverage/binary audit）
-  - 個別: `swift run RubyfreeCoreTests` / `swift run RubyfreeSystemTests` / `./Scripts/coverage.sh`
-- Issues(open): #5(S0-5機内), #6(S0-6 AX実態), #9(M3 セキュア欄確認のみ残), #10(M4), #11(M5=OCR本実装/権限JIT—一部前倒し済), #12(M6)。
+- Issues(open): #5(S0-5機内), #6(S0-6 AX実態), #9(M3 セキュア欄確認のみ残), #10(M4), #11(M5一部前倒し済), #12(M6)。
 
 ## Changelog
-- 2026-06-11: M3を実動状態へ（座標バグ修正・AX単語抽出・OCRフォールバック・オーバーレイ刷新）。`ed2fd2d` push・CI green。辞書方針はユーザー判断待ち。
+- 2026-06-11: 読み解析をJMdict/kanjidic2辞書ベースへ刷新＋複数読み表示。純Swift・非通信維持・再現可能生成。Core 153+1緑/97.45%。実機評価「まあまあ」、残課題3件（チップ残留/ルビ重なり/正答率）をNextに記録。
+- 2026-06-11: M3を実動状態へ（座標バグ修正・AX単語抽出・OCRフォールバック・オーバーレイ刷新）。`ed2fd2d` push・CI green。
 - 2026-06-10: M3 AXパイプライン+オーバーレイ コア実装（Fake E2E成功）。

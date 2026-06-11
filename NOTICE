@@ -1,0 +1,24 @@
+rubyfree — third-party data attributions
+=========================================
+
+rubyfree's own source code is licensed under the MIT License.
+
+The bundled reading dictionary (Sources/RubyfreeCore/Resources/words.tsv and
+kanji.tsv) is a derived work generated from the following dictionaries, which are
+the property of the Electronic Dictionary Research and Development Group (EDRDG)
+and used under the Creative Commons Attribution-ShareAlike 4.0 International
+licence (CC BY-SA 4.0):
+
+  - JMdict    — Japanese-Multilingual Dictionary
+                https://www.edrdg.org/jmdict/j_jmdict.html
+  - KANJIDIC2 — Kanji dictionary
+                https://www.edrdg.org/wiki/index.php/KANJIDIC_Project
+
+See https://www.edrdg.org/edrdg/licence.html for the EDRDG licence statement.
+
+As required by CC BY-SA 4.0, the generated dictionary files (words.tsv, kanji.tsv)
+remain available under CC BY-SA 4.0. This attribution does not affect the MIT
+licence of rubyfree's source code; only the data files are CC BY-SA.
+
+Generation is reproducible via Scripts/fetch-dict-sources.sh and
+Scripts/build-dict.swift.

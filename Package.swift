@@ -13,7 +13,12 @@ let package = Package(
     name: "rubyfree",
     platforms: [.macOS("26.0")],
     targets: [
-        .target(name: "RubyfreeCore"),
+        .target(
+            name: "RubyfreeCore",
+            // Bundled reading dictionary (generated from JMdict + kanjidic2 by
+            // Scripts/build-dict.swift). Loaded at runtime via Bundle.module — no network.
+            resources: [.copy("Resources/words.tsv"), .copy("Resources/kanji.tsv")]
+        ),
         .target(
             name: "RubyfreeSystem",
             dependencies: ["RubyfreeCore"]

@@ -20,3 +20,7 @@ Package.resolved
 
 # Serena tooling state (per-machine, not project code)
 /.serena/
+
+# Dictionary SOURCE downloads (build-time only; generated TSVs under
+# Sources/RubyfreeCore/Resources/ are committed, the raw XML is not)
+/.dict-cache/

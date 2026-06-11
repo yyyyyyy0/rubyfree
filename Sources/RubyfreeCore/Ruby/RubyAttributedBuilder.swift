@@ -84,7 +84,16 @@ public struct RubyAttributedBuilder: Sendable {
             // Build the CTRubyAnnotation for this run.
             // We use CTRubyAnnotationCreateWithAttributes so we can supply a
             // dedicated ruby font; the ruby text goes in the .before (above) slot.
-            let rubyText = run.ruby as CFString
+            // When a word has several known readings, show them all joined by a
+            // full-width slash so the learner sees the full set rather than one guess:
+            //   角 → かど／つの
+            let rubyString: String
+            if run.alternatives.isEmpty {
+                rubyString = run.ruby
+            } else {
+                rubyString = ([run.ruby] + run.alternatives).joined(separator: "／")
+            }
+            let rubyText = rubyString as CFString
             let rubyAttr = CTRubyAnnotationCreateWithAttributes(
                 .auto,          // alignment
                 .auto,          // overhang

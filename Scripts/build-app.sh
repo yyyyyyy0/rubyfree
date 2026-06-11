@@ -35,6 +35,17 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 cp "$ROOT/Scripts/Info.plist.template" "$APP_DIR/Contents/Info.plist"
 
+# Copy SwiftPM resource bundles (e.g. the bundled reading dictionary) into
+# Contents/Resources so Bundle.module resolves them at runtime. Without this the app
+# silently falls back to the lower-accuracy tokenizer.
+BIN_DIR="$(dirname "$BIN_PATH")"
+shopt -s nullglob
+for bundle in "$BIN_DIR"/*.bundle; do
+    echo "==> bundling resource: $(basename "$bundle")"
+    cp -R "$bundle" "$APP_DIR/Contents/Resources/"
+done
+shopt -u nullglob
+
 echo "==> codesign (identity: ${SIGN_IDENTITY})"
 codesign --force --options runtime \
     --entitlements "$ROOT/Scripts/entitlements.plist" \

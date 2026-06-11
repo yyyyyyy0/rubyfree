@@ -35,11 +35,21 @@ let capture: any TextCapturing = useFake
     : TextCaptureStrategy(primary: AXTextCapture(), fallback: ocrEnabled ? ocrCapture : nil)
 let secureDetector: any SecureFieldDetecting = useFake ? NoSecureFieldDetector() : AXSecureFieldDetector()
 
+// Prefer the bundled JMdict/kanjidic2 dictionary for accurate, multi-candidate readings;
+// fall back to the CFStringTokenizer-based analyzer only if the resource is missing.
+let bundledDictionary = ReadingDictionary.bundled()
+let analyzer: any JapaneseAnalyzing = bundledDictionary.map { DictionaryAnalyzer(dictionary: $0) } ?? StandardAnalyzer()
+if let bundledDictionary {
+    DebugLog.log("analyzer=DictionaryAnalyzer words=\(bundledDictionary.words.count) kanji=\(bundledDictionary.kanji.count)")
+} else {
+    DebugLog.log("analyzer=StandardAnalyzer (bundled dictionary not found — degraded accuracy)")
+}
+
 let coordinator = AppCoordinator(
     monitor: PollingMouseMonitor(),
     capture: capture,
     secureDetector: secureDetector,
-    analyzer: StandardAnalyzer(),
+    analyzer: analyzer,
     overlay: OverlayWindowController(),
     permissions: permissions
 )
