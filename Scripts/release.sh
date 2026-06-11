@@ -38,8 +38,11 @@ echo "==> non-communication audit"
 "$ROOT/Scripts/audit-binary.sh" "$APP_DIR"
 
 # ── 4. Confirm the ad-hoc signature actually took ───────────────────────────
+# Capture to a variable first: piping straight into `grep -q` lets grep close the pipe
+# early, which SIGPIPEs codesign and (under `pipefail`) fails the whole pipeline.
 echo "==> verifying ad-hoc signature"
-if codesign -dvv "$APP_DIR" 2>&1 | grep -q 'Signature=adhoc'; then
+SIGINFO="$(codesign -dvv "$APP_DIR" 2>&1)"
+if printf '%s\n' "$SIGINFO" | grep -q 'Signature=adhoc'; then
     echo "    Signature=adhoc OK"
 else
     echo "FAIL: expected an ad-hoc signature on the release build"; exit 1
