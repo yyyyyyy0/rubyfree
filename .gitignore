@@ -17,3 +17,6 @@ Package.resolved
 
 # S0 throwaway spikes (results recorded in issues, code is disposable)
 /Spikes/
+
+# Serena tooling state (per-machine, not project code)
+/.serena/
