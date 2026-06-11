@@ -15,7 +15,7 @@ v0.9.0 公開後、**設定拡充エピック #14（#15〜#19）を完了**し *
 - **v0.9.1 公開（`f1adad7`）**: Info.plist 0.9.0→0.9.1、`release.sh` で ad-hoc 配布、GitHub Release 公開（prerelease）。
 
 ## 2. いまの状態（State）
-- ブランチ `main`、HEAD **`f1adad7`**、作業ツリー clean、未push無し。CI **green**。
+- ブランチ `main`、HEAD **`3d5170c`**（v0.9.1 タグは `f1adad7`、その上に本 HANDOVER のdocsコミット）、作業ツリー clean、未push無し。CI **green**。
 - テスト: **Core 216 + System 57 passed**、Core カバレッジ **98%超**、非通信ガード・バイナリ監査 **PASS**。
 - **公開リリース**: `v0.9.1`（prerelease）= https://github.com/yyyyyyy0/rubyfree/releases/tag/v0.9.1 。SHA-256 `74b38b2453f422a18da57dde416217bb4500ccc3db593fa70da03bea69a8a6f7`。v0.9.0 も公開済み。
 - `~/Applications/rubyfree.app` は dev-cert ビルドで稼働中（実機確認OK）。
@@ -46,7 +46,7 @@ v0.9.0 公開後、**設定拡充エピック #14（#15〜#19）を完了**し *
 - **ファイル削除は trash**（rm はブロック）。
 
 ## 6. 重要リンク・参照（References）
-- リポジトリ: https://github.com/yyyyyyy0/rubyfree （最新 main `f1adad7`）
+- リポジトリ: https://github.com/yyyyyyy0/rubyfree （最新 main `3d5170c`、v0.9.1 タグ `f1adad7`）
 - リリース: v0.9.1 https://github.com/yyyyyyy0/rubyfree/releases/tag/v0.9.1
 - プラン(SSOT): `/Users/nil/.claude/plans/polished-hatching-mango.md`
 - プロジェクトメモリ: `/Users/nil/.claude/projects/-Users-nil-src-rubyfree/memory/rubyfree-spec.md`
