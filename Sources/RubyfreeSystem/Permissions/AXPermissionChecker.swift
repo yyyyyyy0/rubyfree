@@ -51,4 +51,12 @@ public struct AXPermissionChecker: PermissionChecking {
             NSWorkspace.shared.open(url)
         }
     }
+
+    /// Opens System Settings at Privacy → Screen Recording (for the OCR fallback grant).
+    public func openScreenRecordingSettings() {
+        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!
+        Task { @MainActor in
+            NSWorkspace.shared.open(url)
+        }
+    }
 }

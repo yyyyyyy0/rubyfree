@@ -21,16 +21,23 @@ final class AppCoordinator {
     private let builder: RubyAttributedBuilder
     private let overlay: any OverlayPresenting
     private let permissions: any PermissionChecking
+    private let settings: any SettingsStoring
 
     private let hover: HoverReducer
     private let stateReducer: AppStateReducer
     private let settleDelay: TimeInterval
+    private let permissionPollInterval: TimeInterval
 
     private var hoverState = HoverState()
-    private var appState: AppState = .idle
+    private var appState: AppState = .disabled
     private var generation = 0
     private var settleTimer: Timer?
+    private var permissionTimer: Timer?
     private var captureTask: Task<Void, Never>?
+
+    /// Invoked on the main actor after any state change that the UI cares about (enable
+    /// toggle, permission gain/loss) so the menu / status item can refresh.
+    var onStateChange: (@MainActor () -> Void)?
 
     init(
         monitor: any GlobalMouseMonitoring,
@@ -41,8 +48,10 @@ final class AppCoordinator {
         builder: RubyAttributedBuilder = RubyAttributedBuilder(),
         overlay: any OverlayPresenting,
         permissions: any PermissionChecking,
+        settings: any SettingsStoring,
         settleDelay: TimeInterval = 0.35,
-        minMovement: CGFloat = 4
+        minMovement: CGFloat = 4,
+        permissionPollInterval: TimeInterval = 2.0
     ) {
         self.monitor = monitor
         self.capture = capture
@@ -52,15 +61,79 @@ final class AppCoordinator {
         self.builder = builder
         self.overlay = overlay
         self.permissions = permissions
+        self.settings = settings
         self.hover = HoverReducer(minMovement: minMovement)
         self.stateReducer = AppStateReducer()
         self.settleDelay = settleDelay
+        self.permissionPollInterval = permissionPollInterval
     }
 
+    // MARK: - Lifecycle / enablement
+
+    /// True unless the user has explicitly turned rubyfree off.
+    var isEnabled: Bool {
+        if case .disabled = appState { return false }
+        return true
+    }
+
+    /// Current permission snapshot (for the menu).
+    func currentPermissions() -> PermissionStatus { permissions.current() }
+
     func start() {
-        appState = stateReducer.reduce(appState, .permissionsChanged(permissions.current()))
         monitor.onMove = { [weak self] point in self?.handleMoved(point) }
-        monitor.start()
+        // Restore the persisted on/off preference, then start watching for permission
+        // changes (grants/revocations) even while disabled so the menu stays accurate.
+        setEnabled(settings.isEnabled)
+        startPermissionPolling()
+    }
+
+    /// Turn hovering on/off. Persists the preference, drives the state machine, and
+    /// releases or re-acquires the mouse monitor accordingly.
+    func setEnabled(_ enabled: Bool) {
+        settings.isEnabled = enabled
+        appState = stateReducer.reduce(appState, .setEnabled(enabled))
+        if enabled {
+            // Re-evaluate permissions on enable so we land in idle vs needsPermission.
+            appState = stateReducer.reduce(appState, .permissionsChanged(permissions.current()))
+        }
+        syncMonitoring()
+        onStateChange?()
+    }
+
+    /// Bring the running monitor / overlay in line with `appState`: active states keep the
+    /// monitor running; `.disabled` / `.needsPermission` release it (CPU quiet) and clear
+    /// any visible chip.
+    private func syncMonitoring() {
+        switch appState {
+        case .idle, .capturing, .showing:
+            monitor.start()  // no-op if already running
+        case .disabled, .needsPermission:
+            monitor.stop()
+            cancelSettleTimer()
+            captureTask?.cancel()
+            captureTask = nil
+            generation += 1  // drop any in-flight capture's late present
+            overlay.hide()
+        }
+    }
+
+    private func startPermissionPolling() {
+        permissionTimer?.invalidate()
+        permissionTimer = Timer.scheduledTimer(withTimeInterval: permissionPollInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.pollPermissions() }
+        }
+    }
+
+    /// Detect a permission gained/lost while running. A manual OFF (`.disabled`) is left
+    /// untouched — recovering AX must not silently re-enable what the user turned off.
+    private func pollPermissions() {
+        guard isEnabled else { return }
+        let before = appState
+        appState = stateReducer.reduce(appState, .permissionsChanged(permissions.current()))
+        guard appState != before else { return }
+        DebugLog.log("permission change: \(before) → \(appState)")
+        syncMonitoring()
+        onStateChange?()
     }
 
     // MARK: - Hover

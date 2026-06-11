@@ -25,15 +25,18 @@ rubyfree = マウスホバーで画面上の漢字にふりがな（ルビ）を
 - **生成TSVをリポジトリにコミット**（クリーン環境でダウンロード無しにビルド可能＝再現性/オフライン優先。容量はユーザー許容）。
 
 ## 4. 次にやること（Next）
-1. **M4着手**(issue#10): メニュー拡充（ON/OFF・権限状態）・PermissionsManager案内+ポーリング・Settings永続化。完了条件: プランM4受入基準＋v0.9自己評価。
-2. **issue #9 close 判断**: M3受入のうちセキュア欄非表示は**ネイティブ欄で満たす**（下記Known limitations）。残りM3項目は実装済。closeしてよい状態。
-3. (任意)テーマ/カラーパレット選択のbacklog化。
+1. **v0.9 ゲート（issue#10）**: M4実装は完了（実機「動作確認おｋ」）。残るは受入の最後＝**AXのみMVPを約1週間自己使用して再評価**（コード作業ではなく運用評価）。1週間使って良ければ #10 close。日付目安: 2026-06-18 以降に再評価。
+2. (任意)テーマ/カラーパレット選択のbacklog化。
+3. (将来)M5: OCRハードニング（正答率のOCR誤差対策。2倍アップスケール/usesLanguageCorrection等）。M6。
+
+✅ issue #9 (M3) は close 済み（セキュア欄はネイティブ確実・ブラウザは Known limitations）。
 
 ### Known limitations / Deferred（合意済み・後回し）
 - **読み正答率「まちまち」はOCR認識誤差が主因**（辞書ではない）。辞書監査で代表的難読40語中39語が第1読み正解・欠落0。ブラウザはOCR経路でVisionの誤認識（例: 父→夫）が出る。**ユーザー合意の上で受容**（誤読は減光=uncertain表示）。本格対策はM5のOCRハードニング（2倍アップスケール/usesLanguageCorrection等は安価な実験候補）。
 - **ブラウザのセキュアフィールドAX判定は保証外**（後回し合意）。`AXSecureTextField`サブロールはネイティブ確実・WebKitは多くで出る・Chromeは出さない可能性。ただし**生パスワードは構造的に非露出**（伏字••••をOCRしても漢字なし→グロスせず）。残エッジ=ユーザーが「パスワード表示」で平文化した場合のみ。
 
 ### 解決済み（Resolved）
+- **M4 常駐・権限フロー・設定 実装完了**（実機確認OK）。メニュー: ON/OFFトグル（OFFで`monitor.stop()`＝ポーリング停止/CPU静音・overlay hide・task cancel、アイコン減光）・権限状態表示・未許可時「設定で開く…」。`AppCoordinator` に `setEnabled`/権限ポーリング(2s, 実行中喪失検出→needsPermission・回復で復帰)・`syncMonitoring`。`MenuController`(NSMenuDelegateで開く度+onStateChangeで更新)を main.swift から抽出。`UserDefaultsSettingsStore`(設定値=isEnabledのみ永続、ユーザーデータ非保持)。LSUIElementは既設でDockレス。
 - **3字以上の熟語がまとめてグロスされない**（実機「判定できてる」確認済）。原因は捕捉レイヤーの`CFStringTokenizer`が熟語分割（経済学→経済|学）。グロス単位を**連続漢字ラン**に変更（新Core純ロジック`KanjiRun`）。AX(`expandToWord`)・OCR(`VisionTextRecognizer`)両経路で採用、辞書(経済学→けいざいがく等を完備)の最長一致が活きる。
 - **セキュア検出のマルチモニタ座標バグ**: `AXSecureFieldDetector`のy反転が`NSScreen.main`基準で、多モニタだとプライマリと不一致→ヒットテスト位置ズレでパスワード欄取りこぼしリスクだった。`AXTextCapture`同様**プライマリ画面(origin0,0)基準**へ修正。
 - **複数読みルビの重なり**（実機「よくなった」確認済）。`RubyAttributedBuilder` の CTRubyAnnotation overhang を `.auto`→`.none`（幅広ルビが隣接ラン/漢字へはみ出さず基底側が幅確保）、`RubyStyle.maxReadings`（既定3）で表示候補を間引き（モデルは全候補保持）。`CTRubyAnnotationGetTextForPosition` でルビ文字列を実読み出し検証。
@@ -68,6 +71,7 @@ rubyfree = マウスホバーで画面上の漢字にふりがな（ルビ）を
 - Issues(open): #5(S0-5機内), #6(S0-6 AX実態), #9(M3 セキュア欄確認のみ残), #10(M4), #11(M5一部前倒し済), #12(M6)。
 
 ## Changelog
+- 2026-06-11: M4実装（メニューON/OFFトグル・権限状態表示+喪失検出ポーリング+設定で開く・UserDefaults設定永続・MenuController抽出）。実機確認OK。残v0.9ゲート=1週間自己使用。#9 close。
 - 2026-06-11: 3字以上熟語をまとめてグロス（連続漢字ラン KanjiRun を AX/OCR両経路で採用）。セキュア検出のマルチモニタ座標バグも修正。実機確認OK。正答率まちまち=OCR誤差と切り分け（辞書は無実）。
 - 2026-06-11: 複数読みルビの重なり解消（overhang無効化＋表示上限maxReadings=3）。run-dev.sh の旧プロセス残留も修正。実機「よくなった」確認。
 - 2026-06-11: チップ残留バグ修正（移動時の捕捉キャンセル+generation更新+無条件hide、fail経路hide）。実機「よさげ」確認。

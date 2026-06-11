@@ -45,51 +45,28 @@ if let bundledDictionary {
     DebugLog.log("analyzer=StandardAnalyzer (bundled dictionary not found — degraded accuracy)")
 }
 
+let settings = UserDefaultsSettingsStore()
+
 let coordinator = AppCoordinator(
     monitor: PollingMouseMonitor(),
     capture: capture,
     secureDetector: secureDetector,
     analyzer: analyzer,
     overlay: OverlayWindowController(),
-    permissions: permissions
+    permissions: permissions,
+    settings: settings
 )
 coordinator.start()
 
-// Minimal status item (full menu in M4).
+// Menu-bar UI: on/off toggle, live permission status, open-settings shortcuts, quit.
+// Held for the process lifetime so its target/actions stay valid.
 let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-statusItem.button?.title = "る"
-
-let menu = NSMenu()
-let axStatus = NSMenuItem(
-    title: permissions.current().accessibility ? "アクセシビリティ: 許可済み ✓" : "アクセシビリティ: 未許可 ✗",
-    action: nil, keyEquivalent: ""
+let menuController = MenuController(
+    coordinator: coordinator,
+    permissions: permissions,
+    statusItem: statusItem,
+    useFake: useFake
 )
-axStatus.isEnabled = false
-menu.addItem(axStatus)
-if !useFake {
-    let ocrLabel: String
-    if ocrEnabled {
-        ocrLabel = "OCR フォールバック: 有効 ✓"
-    } else if screenRecordingGranted {
-        ocrLabel = "OCR フォールバック: 無効"
-    } else {
-        ocrLabel = "OCR フォールバック: 画面収録の許可が必要（許可後に再起動）"
-    }
-    let ocrStatus = NSMenuItem(title: ocrLabel, action: nil, keyEquivalent: "")
-    ocrStatus.isEnabled = false
-    menu.addItem(ocrStatus)
-}
-if useFake {
-    let fake = NSMenuItem(title: "（FAKE_CAPTURE モード）", action: nil, keyEquivalent: "")
-    fake.isEnabled = false
-    menu.addItem(fake)
-}
-menu.addItem(.separator())
-menu.addItem(
-    withTitle: "Quit rubyfree",
-    action: #selector(NSApplication.terminate(_:)),
-    keyEquivalent: "q"
-)
-statusItem.menu = menu
+_ = menuController  // keep alive
 
 app.run()
