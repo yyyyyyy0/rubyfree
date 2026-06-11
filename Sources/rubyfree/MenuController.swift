@@ -8,6 +8,10 @@ import RubyfreeSystem
 /// The menu refreshes both on open (`menuNeedsUpdate`) and whenever the coordinator
 /// reports a state change (`onStateChange`), so a permission lost while the menu is closed
 /// still updates the status-item appearance.
+///
+/// The "設定…" item is wired via the `openSettings` closure so `MenuController` does not
+/// depend on `SettingsWindowController` directly — decoupling is done at the call site
+/// (`main.swift`), keeping the menu a pure presentation layer.
 @MainActor
 final class MenuController: NSObject, NSMenuDelegate {
 
@@ -15,6 +19,9 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let permissions: AXPermissionChecker
     private let statusItem: NSStatusItem
     private let useFake: Bool
+    /// Invoked when the user chooses "設定…". Supplied by `main.swift` so this class
+    /// stays independent of `SettingsWindowController`.
+    private let openSettings: @MainActor () -> Void
 
     private let menu = NSMenu()
     private let toggleItem  = NSMenuItem(title: "", action: nil, keyEquivalent: "")
@@ -44,11 +51,13 @@ final class MenuController: NSObject, NSMenuDelegate {
     init(coordinator: AppCoordinator,
          permissions: AXPermissionChecker,
          statusItem: NSStatusItem,
-         useFake: Bool) {
+         useFake: Bool,
+         openSettings: @escaping @MainActor () -> Void) {
         self.coordinator = coordinator
         self.permissions = permissions
         self.statusItem = statusItem
         self.useFake = useFake
+        self.openSettings = openSettings
         super.init()
         build()
         coordinator.onStateChange = { [weak self] in self?.refresh() }
@@ -82,6 +91,10 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(maxReadingsItem)
         menu.addItem(settleItem)
         menu.addItem(.separator())
+        let settings = NSMenuItem(title: "設定…",
+                                  action: #selector(openSettingsWindow), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         let about = NSMenuItem(title: "rubyfree について…",
                                action: #selector(showAbout), keyEquivalent: "")
         about.target = self
@@ -213,6 +226,8 @@ final class MenuController: NSObject, NSMenuDelegate {
         coordinator.setSettleDelay(Double(ms) / 1000)
         refresh()
     }
+
+    @objc private func openSettingsWindow() { openSettings() }
 
     @objc private func openAXSettings() { permissions.openAccessibilitySettings() }
     @objc private func openScreenSettings() { permissions.openScreenRecordingSettings() }

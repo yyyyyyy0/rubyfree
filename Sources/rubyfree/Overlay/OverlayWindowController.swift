@@ -145,4 +145,8 @@ final class OverlayWindowController: OverlayPresenting {
             stroke: theme.chipStrokeColor
         )
     }
+
+    func updateStyle(_ style: RubyStyle) {
+        renderer.updateStyle(style)
+    }
 }
