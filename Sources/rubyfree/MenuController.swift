@@ -30,6 +30,9 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let ocrStatus   = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let screenOpen  = NSMenuItem(title: "画面収録を設定で開く…", action: nil, keyEquivalent: "")
     private let themeItem   = NSMenuItem(title: "テーマ", action: nil, keyEquivalent: "")
+    /// "直前の語の読みを修正…" — enabled only when a word was just glossed and the user
+    /// dictionary is editable. Opens a prefilled correction dialog.
+    private let correctItem = NSMenuItem(title: "直前の語の読みを修正…", action: nil, keyEquivalent: "")
     /// One radio item per preset, keyed by theme id, so `refresh()` can tick the active one.
     private var themeItems: [String: NSMenuItem] = [:]
     /// Lazily created menu item for the custom theme (shown only after one has been saved).
@@ -92,6 +95,10 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(fontSizeItem)
         menu.addItem(maxReadingsItem)
         menu.addItem(settleItem)
+        menu.addItem(.separator())
+        correctItem.target = self
+        correctItem.action = #selector(correctLastReading)
+        menu.addItem(correctItem)
         menu.addItem(.separator())
         let settings = NSMenuItem(title: "設定…",
                                   action: #selector(openSettingsWindow), keyEquivalent: ",")
@@ -184,6 +191,13 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
 
+    /// Gate the correction item: available only when a word was just glossed and the user
+    /// dictionary is editable. Other items keep AppKit's default (enabled).
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem == correctItem { return coordinator.lastGlossedSurface != nil }
+        return true
+    }
+
     // MARK: - Refresh
 
     func refresh() {
@@ -216,6 +230,13 @@ final class MenuController: NSObject, NSMenuDelegate {
         tick(fontSizeItems, active: coordinator.currentFontSize)
         tick(maxReadingsItems, active: coordinator.currentMaxReadings)
         tick(settleItems, active: Int(coordinator.currentSettleDelay * 1000))
+
+        // Title reflects the just-glossed word; enabled state is driven by validateMenuItem.
+        if let surface = coordinator.lastGlossedSurface {
+            correctItem.title = "「\(surface)」の読みを修正…"
+        } else {
+            correctItem.title = "直前の語の読みを修正…"
+        }
 
         // Dim the menu-bar glyph when turned off, as a passive on/off cue.
         statusItem.button?.appearsDisabled = !enabled
@@ -261,6 +282,51 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     @objc private func openAXSettings() { permissions.openAccessibilitySettings() }
     @objc private func openScreenSettings() { permissions.openScreenRecordingSettings() }
+
+    /// Correct the reading of the just-glossed word: show a dialog prefilled with that word
+    /// and a reading field. On OK, register it in the user dictionary (persisted only here —
+    /// the surface is held in memory only until the user commits this save).
+    @objc private func correctLastReading() {
+        guard let surface = coordinator.lastGlossedSurface else { return }
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "「\(surface)」の読みを修正"
+        alert.informativeText = "正しい読みを入力してください（複数は ／ や , で区切り）。"
+        alert.addButton(withTitle: "登録")
+        alert.addButton(withTitle: "キャンセル")
+
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 220, height: 24))
+        field.placeholderString = "ひらがな / カタカナ"
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        let readings = field.stringValue
+            .split(whereSeparator: { "／/,、 ".contains($0) })
+            .map(String.init)
+        do {
+            try coordinator.addUserReading(surface: surface, readings: readings)
+        } catch {
+            let fail = NSAlert()
+            fail.messageText = "登録できませんでした"
+            fail.informativeText = Self.message(for: error)
+            fail.runModal()
+        }
+    }
+
+    /// Map a `UserDictionaryError` to a short Japanese message (shared shape with the editor).
+    private static func message(for error: Error) -> String {
+        guard let e = error as? UserDictionaryError else { return "入力を確認してください" }
+        switch e {
+        case .emptySurface, .surfaceHasControlChars, .surfaceTooLong:
+            return "対象の語が不正です"
+        case .noValidReadings: return "読みを入力してください（ひらがな/カタカナ）"
+        case .readingTooLong(let max): return "読みは \(max) 文字以内にしてください"
+        case .capacityExceeded(let max): return "登録できる上限（\(max) 件）に達しています"
+        }
+    }
 
     /// Show the native About panel. The credits carry the third-party attribution that
     /// distribution requires — the bundled dictionary is CC BY-SA 4.0, whose attribution

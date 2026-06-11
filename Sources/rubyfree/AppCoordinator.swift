@@ -174,6 +174,14 @@ final class AppCoordinator {
 
     // MARK: - User dictionary (registered readings)
 
+    /// The most recently glossed surface (in-memory only). Lets the menu offer "correct the
+    /// last word's reading". Never persisted/logged; cleared when hovering is turned off.
+    private var lastSurface: String?
+
+    /// The last glossed surface, when in-app dictionary editing is available — else nil so the
+    /// menu's correction item stays disabled.
+    var lastGlossedSurface: String? { canEditUserDictionary ? lastSurface : nil }
+
     /// Whether in-app dictionary editing is available (wired with a store + rebuild closure).
     var canEditUserDictionary: Bool { userDictionary != nil }
 
@@ -257,6 +265,7 @@ final class AppCoordinator {
             captureTask = nil
             generation += 1  // drop any in-flight capture's late present
             overlay.hide()
+            lastSurface = nil  // forget the last word when hovering is off (privacy)
         }
     }
 
@@ -371,6 +380,9 @@ final class AppCoordinator {
 
         let attributed = builder.build(runs, style: style)
         appState = stateReducer.reduce(appState, .captureSucceeded(generation: gen))
+        // Remember the just-glossed surface so the user can correct its reading from the menu.
+        // Held in memory only (never persisted/logged); cleared when hovering is turned off.
+        lastSurface = captured.text
         overlay.show(attributed, at: captured.screenRect)
     }
 
