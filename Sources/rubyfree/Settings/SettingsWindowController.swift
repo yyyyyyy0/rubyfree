@@ -50,8 +50,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         hosting.translatesAutoresizingMaskIntoConstraints = false
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: 560),
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -102,6 +102,7 @@ private struct SettingsFormView: View {
             fontSizeSection
             maxReadingsSection
             settleDelaySection
+            CustomThemeEditorView(coordinator: coordinator)
         }
         .formStyle(.grouped)
         .padding()
