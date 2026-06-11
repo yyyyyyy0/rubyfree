@@ -16,7 +16,13 @@ final class AppCoordinator {
     private let monitor: any GlobalMouseMonitoring
     private let capture: any TextCapturing
     private let secureDetector: any SecureFieldDetecting
-    private let analyzer: any JapaneseAnalyzing
+    /// Swappable so a user-dictionary edit can rebuild the merged analyzer live (next hover).
+    private var analyzer: any JapaneseAnalyzing
+    /// User dictionary (registered readings) and a closure that rebuilds the merged analyzer
+    /// from its current contents. Both nil disables in-app dictionary editing (e.g. fake/test
+    /// wiring) — the startup-merged analyzer still applies.
+    private let userDictionary: (any UserDictionaryStoring)?
+    private let rebuildAnalyzer: (() -> any JapaneseAnalyzing)?
     private let composer: RubyComposer
     private let builder: RubyAttributedBuilder
     private let overlay: any OverlayPresenting
@@ -54,6 +60,8 @@ final class AppCoordinator {
         overlay: any OverlayPresenting,
         permissions: any PermissionChecking,
         settings: any SettingsStoring,
+        userDictionary: (any UserDictionaryStoring)? = nil,
+        rebuildAnalyzer: (() -> any JapaneseAnalyzing)? = nil,
         settleDelay: TimeInterval = 0.35,
         minMovement: CGFloat = 4,
         permissionPollInterval: TimeInterval = 2.0
@@ -62,6 +70,8 @@ final class AppCoordinator {
         self.capture = capture
         self.secureDetector = secureDetector
         self.analyzer = analyzer
+        self.userDictionary = userDictionary
+        self.rebuildAnalyzer = rebuildAnalyzer
         self.composer = composer
         self.builder = builder
         self.overlay = overlay
@@ -130,6 +140,41 @@ final class AppCoordinator {
         settings.settleDelay = seconds
         settleDelay = settings.settleDelay
         onStateChange?()
+    }
+
+    // MARK: - User dictionary (registered readings)
+
+    /// Whether in-app dictionary editing is available (wired with a store + rebuild closure).
+    var canEditUserDictionary: Bool { userDictionary != nil }
+
+    /// Current registered entries, sorted by surface (for the editor list).
+    func userDictionaryEntries() -> [(surface: String, readings: [String])] {
+        guard let userDictionary else { return [] }
+        return userDictionary.load().sorted { $0.key < $1.key }.map { (surface: $0.key, readings: $0.value) }
+    }
+
+    /// Register/overwrite a reading, then rebuild the merged analyzer so the next hover uses
+    /// it (capture-side okurigana gating still updates on next launch). Throws validation
+    /// errors from the store.
+    func addUserReading(surface: String, readings: [String]) throws {
+        guard let userDictionary else { return }
+        try userDictionary.add(surface: surface, readings: readings)
+        reloadAnalyzerFromUserDictionary()
+    }
+
+    /// Remove a registered reading and rebuild the merged analyzer.
+    func removeUserReading(surface: String) {
+        guard let userDictionary else { return }
+        userDictionary.remove(surface: surface)
+        reloadAnalyzerFromUserDictionary()
+    }
+
+    /// Swap in a freshly merged analyzer (bundled + current user dictionary). No-op if no
+    /// rebuild closure was supplied. Clears any visible chip so the next hover re-resolves.
+    private func reloadAnalyzerFromUserDictionary() {
+        guard let rebuildAnalyzer else { return }
+        analyzer = rebuildAnalyzer()
+        overlay.hide()
     }
 
     /// Set the active theme: derive the body ``RubyStyle``, push chip colours to the overlay,

@@ -50,11 +50,12 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         hosting.translatesAutoresizingMaskIntoConstraints = false
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 320, height: 220),
-            styleMask: [.titled, .closable],
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 460),
+            styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
         )
+        win.contentMinSize = NSSize(width: 360, height: 320)
         win.title = "rubyfree 設定"
         win.isReleasedWhenClosed = false
         win.delegate = self
@@ -102,6 +103,9 @@ private struct SettingsFormView: View {
             fontSizeSection
             maxReadingsSection
             settleDelaySection
+            if coordinator.canEditUserDictionary {
+                UserDictionaryEditorView(coordinator: coordinator)
+            }
         }
         .formStyle(.grouped)
         .padding()

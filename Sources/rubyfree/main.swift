@@ -56,6 +56,14 @@ if let effectiveDictionary {
 
 let settings = UserDefaultsSettingsStore()
 
+// Rebuild the merged analyzer from the bundled dictionary + the *current* user dictionary,
+// so an in-app edit takes effect on the next hover (capture-side okurigana updates on next
+// launch). Reused by AppCoordinator after each user-dictionary change.
+let rebuildAnalyzer: () -> any JapaneseAnalyzing = {
+    let merged = bundledDictionary?.merging(words: userDictionary.load())
+    return merged.map { DictionaryAnalyzer(dictionary: $0) } ?? StandardAnalyzer()
+}
+
 let coordinator = AppCoordinator(
     monitor: PollingMouseMonitor(),
     capture: capture,
@@ -63,7 +71,9 @@ let coordinator = AppCoordinator(
     analyzer: analyzer,
     overlay: OverlayWindowController(),
     permissions: permissions,
-    settings: settings
+    settings: settings,
+    userDictionary: userDictionary,
+    rebuildAnalyzer: rebuildAnalyzer
 )
 coordinator.start()
 
