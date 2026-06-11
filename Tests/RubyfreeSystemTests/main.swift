@@ -4,4 +4,5 @@ import TinyTest
 let t = TinyTest()
 testSystemSmoke(t)
 testSettingsStore(t)
+testUserDictionaryStore(t)
 t.finish()

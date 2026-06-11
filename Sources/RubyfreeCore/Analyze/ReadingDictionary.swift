@@ -25,6 +25,15 @@ public struct ReadingDictionary: Sendable, Equatable {
 
     /// True when neither table holds any entry.
     public var isEmpty: Bool { words.isEmpty && kanji.isEmpty }
+
+    /// Return a new dictionary with `userWords` overlaid on the word table — a user-supplied
+    /// reading **overrides** the bundled one for the same surface (so a corrected reading
+    /// wins). The kanji fallback table is unchanged; `maxWordLength` is recomputed by `init`.
+    /// Pure; the receiver is not mutated.
+    public func merging(words userWords: [String: [String]]) -> ReadingDictionary {
+        guard !userWords.isEmpty else { return self }
+        return ReadingDictionary(words: words.merging(userWords) { _, user in user }, kanji: kanji)
+    }
 }
 
 // MARK: - TSV loading

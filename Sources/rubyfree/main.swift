@@ -21,11 +21,15 @@ let useFake = ProcessInfo.processInfo.environment["RUBYFREE_FAKE_CAPTURE"] != ni
 // (NSTextView/TextEdit, WebKit, PDFs). It needs Screen Recording; request it (JIT) and
 // enable the fallback only once granted — a fresh grant takes effect on next launch.
 // Prefer the bundled JMdict/kanjidic2 dictionary for accurate, multi-candidate readings.
-// Shared with both capture paths so a kanji run can be extended over okurigana
-// (宛 → 宛も) using dictionary-gated matching.
+// Overlay the user's registered readings (explicit settings values — never captured text)
+// so a corrected/added reading wins. The merged dictionary is shared with both capture
+// paths so a kanji run can be extended over okurigana (宛 → 宛も) and the analyzer resolves
+// readings consistently. (Runtime re-merge after an in-app edit lands with the editor UI.)
+let userDictionary = UserDictionaryStore()
 let bundledDictionary = ReadingDictionary.bundled()
+let effectiveDictionary = bundledDictionary?.merging(words: userDictionary.load())
 
-let ocrCapture = OCRTextCapture(dictionary: bundledDictionary)
+let ocrCapture = OCRTextCapture(dictionary: effectiveDictionary)
 let screenRecordingGranted = permissions.current().screenRecording
 if !useFake && !screenRecordingGranted {
     permissions.requestScreenRecording()
@@ -37,15 +41,15 @@ if ocrEnabled {
 
 let capture: any TextCapturing = useFake
     ? FakeTextCapture()
-    : TextCaptureStrategy(primary: AXTextCapture(dictionary: bundledDictionary),
+    : TextCaptureStrategy(primary: AXTextCapture(dictionary: effectiveDictionary),
                           fallback: ocrEnabled ? ocrCapture : nil)
 let secureDetector: any SecureFieldDetecting = useFake ? NoSecureFieldDetector() : AXSecureFieldDetector()
 
 // Fall back to the CFStringTokenizer-based analyzer only if the dictionary resource is
 // missing.
-let analyzer: any JapaneseAnalyzing = bundledDictionary.map { DictionaryAnalyzer(dictionary: $0) } ?? StandardAnalyzer()
-if let bundledDictionary {
-    DebugLog.log("analyzer=DictionaryAnalyzer words=\(bundledDictionary.words.count) kanji=\(bundledDictionary.kanji.count)")
+let analyzer: any JapaneseAnalyzing = effectiveDictionary.map { DictionaryAnalyzer(dictionary: $0) } ?? StandardAnalyzer()
+if let effectiveDictionary {
+    DebugLog.log("analyzer=DictionaryAnalyzer words=\(effectiveDictionary.words.count) kanji=\(effectiveDictionary.kanji.count) userEntries=\(userDictionary.count)")
 } else {
     DebugLog.log("analyzer=StandardAnalyzer (bundled dictionary not found — degraded accuracy)")
 }
