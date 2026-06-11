@@ -50,7 +50,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         hosting.translatesAutoresizingMaskIntoConstraints = false
 
         let win = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 460),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 560),
             styleMask: [.titled, .closable, .resizable],
             backing: .buffered,
             defer: false
@@ -103,6 +103,7 @@ private struct SettingsFormView: View {
             fontSizeSection
             maxReadingsSection
             settleDelaySection
+            CustomThemeEditorView(coordinator: coordinator)
             if coordinator.canEditUserDictionary {
                 UserDictionaryEditorView(coordinator: coordinator)
             }

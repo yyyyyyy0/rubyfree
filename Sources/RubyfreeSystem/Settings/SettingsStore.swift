@@ -18,6 +18,9 @@ public protocol SettingsStoring: AnyObject {
     /// Persisted settings-schema version (for future migrations). Reads as the current
     /// version when absent.
     var schemaVersion: Int { get set }
+    /// User-edited custom theme, serialised as JSON by ``ThemeCodec``. `nil` when no custom
+    /// theme has been saved yet (the "カスタム" menu item is hidden until a value exists).
+    var customTheme: RubyTheme? { get set }
 }
 
 /// Valid ranges and defaults for the numeric settings. Reads are clamped to these so a
@@ -50,6 +53,7 @@ public final class UserDefaultsSettingsStore: SettingsStoring {
     private static let maxReadingsKey = "rubyfree.maxReadings"
     private static let settleDelayKey = "rubyfree.settleDelay"
     private static let schemaVersionKey = "rubyfree.schemaVersion"
+    private static let customThemeKey = "rubyfree.customTheme"
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -91,6 +95,21 @@ public final class UserDefaultsSettingsStore: SettingsStoring {
             return defaults.integer(forKey: Self.schemaVersionKey)
         }
         set { defaults.set(newValue, forKey: Self.schemaVersionKey) }
+    }
+
+    public var customTheme: RubyTheme? {
+        // Absent or un-parseable key → nil (hides the カスタム menu item until one is saved).
+        get {
+            guard let json = defaults.string(forKey: Self.customThemeKey) else { return nil }
+            return ThemeCodec.decode(json)
+        }
+        set {
+            if let theme = newValue, let json = ThemeCodec.encode(theme) {
+                defaults.set(json, forKey: Self.customThemeKey)
+            } else {
+                defaults.removeObject(forKey: Self.customThemeKey)
+            }
+        }
     }
 
     /// Read an Int key, clamped to `range`; absent → `default`.

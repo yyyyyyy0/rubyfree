@@ -100,7 +100,7 @@ final class AppCoordinator {
         // on/off preference. Finally start watching for permission changes (grants/revocations)
         // even while disabled so the menu stays accurate.
         settleDelay = settings.settleDelay
-        applyTheme(RubyTheme.preset(id: settings.themeID), persist: false)
+        applyTheme(resolveTheme(id: settings.themeID), persist: false)
         setEnabled(settings.isEnabled)
         startPermissionPolling()
     }
@@ -113,10 +113,40 @@ final class AppCoordinator {
     var currentFontSize: Int { settings.fontSize }
     var currentMaxReadings: Int { settings.maxReadings }
     var currentSettleDelay: Double { settings.settleDelay }
+    /// The persisted custom theme, if any. Used by the editor to seed initial values.
+    var currentCustomTheme: RubyTheme? { settings.customTheme }
 
-    /// Switch to the theme with `id` (unknown ids fall back to the default) and persist it.
+    /// Switch to the theme with `id`. For `id == "custom"` the persisted custom theme is
+    /// applied (falling back to default when none exists yet). Unknown ids fall back to default.
     func setTheme(id: String) {
-        applyTheme(RubyTheme.preset(id: id), persist: true)
+        applyTheme(resolveTheme(id: id), persist: true)
+    }
+
+    /// Save a new custom theme, activate it immediately, and persist `themeID = "custom"`.
+    func setCustomTheme(_ custom: RubyTheme) {
+        settings.customTheme = custom
+        // Build the canonical custom instance with id="custom" so currentThemeID returns the
+        // right string and the menu radio ticks correctly.
+        let resolved = RubyTheme(
+            id: "custom", name: "カスタム",
+            foregroundColor: custom.foregroundColor,
+            rubyColor: custom.rubyColor,
+            uncertainColor: custom.uncertainColor,
+            chipBackgroundColor: custom.chipBackgroundColor,
+            chipStrokeColor: custom.chipStrokeColor
+        )
+        // applyTheme persists + fires onStateChange, which rebuilds the menu so the カスタム
+        // radio item appears the first time a custom theme is saved.
+        applyTheme(resolved, persist: true)
+    }
+
+    /// Resolve a theme id to a concrete ``RubyTheme``. `"custom"` resolves to the persisted
+    /// custom theme (or default when none exists). All other ids go through `preset(id:)`.
+    private func resolveTheme(id: String) -> RubyTheme {
+        if id == "custom" {
+            return settings.customTheme ?? .default
+        }
+        return RubyTheme.preset(id: id)
     }
 
     /// Persist a new base font size and rebuild the style so the next hover uses it.

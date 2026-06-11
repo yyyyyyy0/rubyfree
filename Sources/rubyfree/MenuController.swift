@@ -32,6 +32,8 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let themeItem   = NSMenuItem(title: "テーマ", action: nil, keyEquivalent: "")
     /// One radio item per preset, keyed by theme id, so `refresh()` can tick the active one.
     private var themeItems: [String: NSMenuItem] = [:]
+    /// Lazily created menu item for the custom theme (shown only after one has been saved).
+    private var customThemeMenuItem: NSMenuItem?
 
     // Staged display/behaviour selectors (interim until the Settings window, #16). Each is a
     // submenu of radio items; `refresh()` ticks the one matching the coordinator's value.
@@ -108,8 +110,9 @@ final class MenuController: NSObject, NSMenuDelegate {
         statusItem.menu = menu
     }
 
-    /// Build the "テーマ" submenu: one radio item per ``RubyTheme`` preset. Selecting an item
-    /// drives `coordinator.setTheme(id:)`; the active one is ticked in `refresh()`.
+    /// Build the "テーマ" submenu: one radio item per preset, plus a "カスタム" item appended
+    /// dynamically in `refresh()` when a custom theme has been saved. Selecting an item drives
+    /// `coordinator.setTheme(id:)`; the active one is ticked in `refresh()`.
     private func buildThemeSubmenu() {
         let submenu = NSMenu()
         for preset in RubyTheme.allPresets {
@@ -122,6 +125,30 @@ final class MenuController: NSObject, NSMenuDelegate {
             themeItems[preset.id] = item
         }
         themeItem.submenu = submenu
+    }
+
+    /// Ensure the "カスタム" submenu item exists and is visible when a custom theme is present,
+    /// or is absent / hidden when none has been saved. Called from `refresh()`.
+    private func syncCustomThemeMenuItem() {
+        guard let submenu = themeItem.submenu else { return }
+        let hasCustom = coordinator.currentCustomTheme != nil
+
+        if hasCustom {
+            if customThemeMenuItem == nil {
+                let item = NSMenuItem(title: "カスタム",
+                                      action: #selector(selectTheme(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = "custom"
+                submenu.addItem(.separator())
+                submenu.addItem(item)
+                customThemeMenuItem = item
+                themeItems["custom"] = item
+            }
+            customThemeMenuItem?.isHidden = false
+        } else {
+            customThemeMenuItem?.isHidden = true
+        }
     }
 
     /// Build the interim "文字サイズ / ルビ候補数 / 反応の速さ" submenus (staged radio items).
@@ -176,6 +203,9 @@ final class MenuController: NSObject, NSMenuDelegate {
                 : "OCRフォールバック: 画面収録の許可が必要（許可後に再起動）"
             screenOpen.isHidden = p.screenRecording
         }
+
+        // Add or hide the カスタム radio item depending on whether a custom theme is saved.
+        syncCustomThemeMenuItem()
 
         // Tick the active theme's radio item.
         let activeThemeID = coordinator.currentThemeID
