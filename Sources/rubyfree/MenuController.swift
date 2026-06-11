@@ -63,6 +63,10 @@ final class MenuController: NSObject, NSMenuDelegate {
         buildThemeSubmenu()
         menu.addItem(themeItem)
         menu.addItem(.separator())
+        let about = NSMenuItem(title: "rubyfree について…",
+                               action: #selector(showAbout), keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
         menu.addItem(withTitle: "rubyfree を終了",
                      action: #selector(NSApplication.terminate(_:)),
                      keyEquivalent: "q")
@@ -137,4 +141,41 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     @objc private func openAXSettings() { permissions.openAccessibilitySettings() }
     @objc private func openScreenSettings() { permissions.openScreenRecordingSettings() }
+
+    /// Show the native About panel. The credits carry the third-party attribution that
+    /// distribution requires — the bundled dictionary is CC BY-SA 4.0, whose attribution
+    /// must travel with the binary (a downloader never sees the repo's NOTICE). App name,
+    /// version, and copyright are read from Info.plist automatically.
+    @objc private func showAbout() {
+        // An accessory (LSUIElement) app isn't active, so the panel would open behind other
+        // windows; activate first so it comes to the front.
+        NSApp.activate(ignoringOtherApps: true)
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: Self.creditsAttributedString])
+    }
+
+    /// Attribution shown in the About panel's scrollable credits area.
+    private static var creditsAttributedString: NSAttributedString {
+        let body = """
+        画面上の漢字にホバーでふりがなを表示する、完全ローカル・非通信のユーティリティ。
+
+        ライセンス
+        rubyfree のソースコードは MIT License です。
+        © 2026 yyyyyyy0
+
+        同梱辞書データ
+        JMdict / KANJIDIC2 — © Electronic Dictionary Research and Development Group (EDRDG)
+        Creative Commons Attribution-ShareAlike 4.0 International（CC BY-SA 4.0）の下で利用しています。
+        生成された辞書ファイル（words.tsv / kanji.tsv）も CC BY-SA 4.0 で配布されます。
+        https://www.edrdg.org/edrdg/licence.html
+
+        ソースコード
+        https://github.com/yyyyyyy0/rubyfree
+        """
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = 6
+        return NSAttributedString(string: body, attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .paragraphStyle: paragraph,
+        ])
+    }
 }
