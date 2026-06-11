@@ -163,7 +163,10 @@ public actor AXTextCapture: TextCapturing {
             return cursor
         }
         let indexInWindow = cursor.location - winLoc
-        guard let local = WordBoundary.wordRange(in: window, utf16Index: indexInWindow) else {
+        // Prefer the maximal kanji run (keeps 経済学 whole for the dictionary); fall back to
+        // the tokenizer word when the cursor isn't on a kanji (e.g. a kana headword).
+        guard let local = KanjiRun.range(in: window, utf16Index: indexInWindow)
+                ?? WordBoundary.wordRange(in: window, utf16Index: indexInWindow) else {
             return cursor
         }
         let absolute = CFRange(location: winLoc + local.location, length: local.length)

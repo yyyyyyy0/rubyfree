@@ -50,7 +50,9 @@ struct VisionTextRecognizer {
             let line = candidate.string
             let confidence = Double(candidate.confidence)
 
-            for range in wordRanges(in: line) {
+            // Gloss whole kanji runs, not tokenizer words — otherwise a 3+ char compound
+            // (経済学) is split (経済 | 学) before the analyzer sees it.
+            for range in KanjiRun.ranges(in: line) {
                 guard let rectObs = candidate.boundingBox(for: range) else { continue }
                 let box = rectObs.boundingBox.toImageCoordinates(imageSize, origin: .upperLeft)
                 guard box.width > 0, box.height > 0 else { continue }
@@ -78,25 +80,5 @@ struct VisionTextRecognizer {
         req.recognitionLanguages = [Locale.Language(identifier: "ja"), Locale.Language(identifier: "en")]
         req.usesLanguageCorrection = false
         return req
-    }
-
-    /// Enumerate word ranges in `line` using the shared ja_JP word-boundary tokenizer.
-    private func wordRanges(in line: String) -> [Range<String.Index>] {
-        let cf = line as CFString
-        let length = CFStringGetLength(cf)
-        guard length > 0,
-              let tokenizer = CFStringTokenizerCreate(
-                kCFAllocatorDefault, cf, CFRangeMake(0, length),
-                kCFStringTokenizerUnitWordBoundary, Locale(identifier: "ja_JP") as CFLocale
-              ) else { return [] }
-
-        var ranges: [Range<String.Index>] = []
-        while CFStringTokenizerAdvanceToNextToken(tokenizer) != [] {
-            let r = CFStringTokenizerGetCurrentTokenRange(tokenizer)
-            if let swiftRange = Range(NSRange(location: r.location, length: r.length), in: line) {
-                ranges.append(swiftRange)
-            }
-        }
-        return ranges
     }
 }

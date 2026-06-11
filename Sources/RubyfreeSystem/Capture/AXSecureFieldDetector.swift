@@ -32,9 +32,15 @@ public struct AXSecureFieldDetector: SecureFieldDetecting {
 
     public func isSecureField(at point: CGPoint) -> Bool {
         // 1. Flip y: AppKit bottom-left → HIServices top-left.
-        //    If there is no main screen (headless / test), we cannot convert — return false.
-        guard let screenHeight = NSScreen.main?.frame.height else { return false }
-        let flippedPoint = CGPoint(x: point.x, y: screenHeight - point.y)
+        //    The flip must pivot on the PRIMARY screen height (the (0,0)-origin menu-bar
+        //    screen), NOT NSScreen.main (which tracks the active window and can be a
+        //    secondary display). Using the wrong height on a multi-monitor setup would
+        //    hit-test the wrong location and could miss a secure field — a privacy hole.
+        //    This mirrors the coordinate convention in AXTextCapture / CoordinateConverter.
+        let screens = NSScreen.screens
+        guard let primary = screens.first(where: { $0.frame.origin == .zero }) ?? screens.first
+        else { return false }  // headless / test: cannot convert → treat as non-secure
+        let flippedPoint = CGPoint(x: point.x, y: primary.frame.height - point.y)
 
         // 2. Hit-test the AX tree.
         let systemWide = AXUIElementCreateSystemWide()
