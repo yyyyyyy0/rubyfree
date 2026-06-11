@@ -35,6 +35,14 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 cp "$ROOT/Scripts/Info.plist.template" "$APP_DIR/Contents/Info.plist"
 
+# App icon (referenced by CFBundleIconFile=AppIcon). Committed asset; regenerate with
+# `swift Scripts/make-icon.swift Scripts/AppIcon.iconset && iconutil -c icns Scripts/AppIcon.iconset -o Scripts/AppIcon.icns`.
+if [ -f "$ROOT/Scripts/AppIcon.icns" ]; then
+    cp "$ROOT/Scripts/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
+else
+    echo "warning: Scripts/AppIcon.icns missing — app will have no icon" >&2
+fi
+
 # Copy SwiftPM resource bundles (e.g. the bundled reading dictionary) into
 # Contents/Resources so Bundle.module resolves them at runtime. Without this the app
 # silently falls back to the lower-accuracy tokenizer.

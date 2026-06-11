@@ -24,3 +24,6 @@ Package.resolved
 # Dictionary SOURCE downloads (build-time only; generated TSVs under
 # Sources/RubyfreeCore/Resources/ are committed, the raw XML is not)
 /.dict-cache/
+
+# Icon generation intermediate (final AppIcon.icns is committed)
+/Scripts/AppIcon.iconset/
