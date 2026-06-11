@@ -112,10 +112,15 @@ final class AppCoordinator {
         generation += 1
         let gen = generation
         appState = stateReducer.reduce(appState, .hoverSettled(generation: gen))
-        guard case .capturing = appState else { return }
+        DebugLog.log("settle: gen=\(gen) at=(\(Int(point.x)),\(Int(point.y))) state=\(appState)")
+        guard case .capturing = appState else {
+            DebugLog.log("settle: not capturing (state=\(appState)) → skip")
+            return
+        }
 
         // Hard privacy rule: never read secure (password) fields.
         if secureDetector.isSecureField(at: point) {
+            DebugLog.log("settle: secure field → suppress")
             appState = stateReducer.reduce(appState, .captureFailed(generation: gen))
             return
         }

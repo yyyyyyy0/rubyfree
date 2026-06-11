@@ -4,15 +4,19 @@ import CoreGraphics
 ///
 /// Two coordinate systems are in play on macOS:
 ///
-/// - **AX / HIToolbox**: origin at top-left of the global virtual desktop,
+/// - **AX / HIToolbox**: origin at top-left of the **primary** screen,
 ///   y increases downward.  All values are in **points**.
-/// - **AppKit / CoreGraphics**: origin at bottom-left of the global virtual
-///   desktop, y increases upward.  All values are in **points**.
+/// - **AppKit / Cocoa**: origin at bottom-left of the **primary** screen,
+///   y increases upward.  All values are in **points**.
 ///
 /// Callers must supply the values that normally come from `NSScreen`:
-/// - `globalHeight` — total height of the virtual desktop in points (i.e.
-///   the `frame.height` of the `NSScreen.screens` union rect, **not** the
-///   height of a single screen).
+/// - `globalHeight` — the **primary screen's** height in points: the screen
+///   whose `frame.origin` is `(0,0)` (the menu-bar screen,
+///   `NSScreen.screens.first`). This is the pivot of the y-flip. Do **not**
+///   pass the `NSScreen.screens` union height: when a secondary display
+///   overhangs above or below the primary, the union height differs from the
+///   primary height by that overhang and injects a constant vertical offset
+///   into every converted point.
 /// - `scale` — the backing-store pixel-to-point ratio (e.g. `2.0` for
 ///   Retina displays, `1.0` otherwise).
 ///

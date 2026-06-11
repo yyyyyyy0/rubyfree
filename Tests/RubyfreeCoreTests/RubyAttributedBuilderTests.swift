@@ -58,8 +58,10 @@ func testRubyAttributedBuilder(_ t: TinyTest) {
     )
     t.expectTrue(uncertainRubyAttr != nil, "kCTRubyAnnotationAttributeName must be present for uncertain run")
 
-    // The uncertain run should use a different (lighter) foreground colour than
-    // the default certain run at the same position.
+    // New contract: the *base* (kanji) keeps the high-contrast foreground colour in both
+    // certain and uncertain runs so the body text stays readable; the uncertainty signal
+    // is carried by the ruby (furigana) colour, not the base. Verify the base colour at
+    // position 0 is the configured `foregroundColor` regardless of `isUncertain`.
     let certainStr = builder.build([RubyRun(base: "行", ruby: "いく", isUncertain: false)])
     let certainColor = certainStr.attribute(
         kCTForegroundColorAttributeName as NSAttributedString.Key,
@@ -71,7 +73,8 @@ func testRubyAttributedBuilder(_ t: TinyTest) {
         at: 0,
         effectiveRange: nil
     ) as! CGColor
-    t.expectTrue(certainColor != uncertainColor, "uncertain run color must differ from certain run color")
+    t.expectEqual(certainColor, RubyStyle().foregroundColor)
+    t.expectEqual(uncertainColor, RubyStyle().foregroundColor)
 
     // ------------------------------------------------------------------
     // 4. Multiple runs: all bases present, ruby annotation on each base.

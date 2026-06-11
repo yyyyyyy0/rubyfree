@@ -35,6 +35,10 @@ final class OverlayWindowController: OverlayPresenting {
     private static let fadeInDuration:  TimeInterval = 0.12
     private static let fadeOutDuration: TimeInterval = 0.10
 
+    /// Vertical gap between the top of the hovered word and the bottom of the chip, so a
+    /// large/zoomed mouse cursor on the word does not cover the furigana.
+    private static let cursorClearanceGap: CGFloat = 10
+
     // MARK: Stored properties
 
     private let panel: NSPanel
@@ -85,7 +89,9 @@ final class OverlayWindowController: OverlayPresenting {
         //    Place the panel so its bottom edge aligns with the top of screenRect.
         //    Horizontally centre over screenRect with mild centering offset.
         let panelX = screenRect.midX - size.width / 2
-        let panelY = screenRect.maxY          // AppKit: Y grows upward; panel bottom = base word top
+        // Lift the chip a few points above the word so a large/zoomed cursor sitting on
+        // the word doesn't occlude it. AppKit Y grows upward.
+        let panelY = screenRect.maxY + Self.cursorClearanceGap
 
         var panelFrame = NSRect(
             x: panelX,

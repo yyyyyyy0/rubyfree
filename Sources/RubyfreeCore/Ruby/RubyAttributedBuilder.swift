@@ -12,22 +12,38 @@ public struct RubyStyle: Sendable {
     public let fontSize: CGFloat
     /// Font family name for the base text.
     public let fontName: String
-    /// Foreground colour for certain (confident) runs.
+    /// Foreground colour of the base (kanji) text. On the dark overlay chip this is a
+    /// near-white so the base stays readable.
     public let foregroundColor: CGColor
-    /// Foreground colour for uncertain runs — typically a lighter tint of
-    /// ``foregroundColor`` so the reader knows the reading may be wrong.
+    /// Colour of the furigana (ruby) gloss — the highlighted element. A bright accent on
+    /// the dark chip so the reading is the most legible part.
+    public let rubyColor: CGColor
+    /// Colour for the ruby of *uncertain* readings — dimmed so the reader knows the
+    /// reading may be wrong.
     public let uncertainColor: CGColor
+    /// Ruby glyph size as a fraction of `fontSize` (furigana is conventionally ~0.5;
+    /// bumped up here for legibility).
+    public let rubyScale: CGFloat
+    /// Extra vertical gap (points) lifted between the ruby gloss and the base glyphs so
+    /// the furigana doesn't visually touch the kanji.
+    public let rubyGap: CGFloat
 
     public init(
-        fontSize: CGFloat = 18,
+        fontSize: CGFloat = 22,
         fontName: String = "HiraginoSans-W3",
-        foregroundColor: CGColor = CGColor(gray: 0.0, alpha: 1.0),
-        uncertainColor: CGColor = CGColor(gray: 0.5, alpha: 1.0)
+        foregroundColor: CGColor = CGColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1.0),
+        rubyColor: CGColor = CGColor(red: 1.0, green: 0.82, blue: 0.30, alpha: 1.0),
+        uncertainColor: CGColor = CGColor(red: 0.70, green: 0.62, blue: 0.40, alpha: 1.0),
+        rubyScale: CGFloat = 0.6,
+        rubyGap: CGFloat = 3
     ) {
         self.fontSize = fontSize
         self.fontName = fontName
         self.foregroundColor = foregroundColor
+        self.rubyColor = rubyColor
         self.uncertainColor = uncertainColor
+        self.rubyScale = rubyScale
+        self.rubyGap = rubyGap
     }
 }
 
@@ -55,14 +71,15 @@ public struct RubyAttributedBuilder: Sendable {
         guard !runs.isEmpty else { return NSAttributedString() }
 
         let baseFont = CTFontCreateWithName(style.fontName as CFString, style.fontSize, nil)
-        // Ruby (furigana) glyph size is conventionally half the base size.
-        let rubyFontSize = style.fontSize * 0.5
+        let rubyFontSize = style.fontSize * style.rubyScale
         let rubyFont = CTFontCreateWithName(style.fontName as CFString, rubyFontSize, nil)
 
         let result = NSMutableAttributedString()
 
         for (index, run) in runs.enumerated() {
-            let color = run.isUncertain ? style.uncertainColor : style.foregroundColor
+            // Base (kanji) keeps the high-contrast foreground; the ruby carries the
+            // uncertainty signal by dimming, so the body text stays readable.
+            let rubyColor = run.isUncertain ? style.uncertainColor : style.rubyColor
 
             // Build the CTRubyAnnotation for this run.
             // We use CTRubyAnnotationCreateWithAttributes so we can supply a
@@ -75,14 +92,16 @@ public struct RubyAttributedBuilder: Sendable {
                 rubyText,
                 [
                     kCTFontAttributeName: rubyFont,
-                    kCTForegroundColorAttributeName: color,
+                    kCTForegroundColorAttributeName: rubyColor,
+                    // Lift the ruby slightly so it doesn't touch the kanji below it.
+                    kCTBaselineOffsetAttributeName: style.rubyGap as CFNumber,
                 ] as CFDictionary
             )
 
             // Attributes for the base (kanji) string.
             let baseAttributes: [NSAttributedString.Key: Any] = [
                 kCTFontAttributeName as NSAttributedString.Key: baseFont,
-                kCTForegroundColorAttributeName as NSAttributedString.Key: color,
+                kCTForegroundColorAttributeName as NSAttributedString.Key: style.foregroundColor,
                 kCTRubyAnnotationAttributeName as NSAttributedString.Key: rubyAttr,
             ]
 
@@ -92,7 +111,7 @@ public struct RubyAttributedBuilder: Sendable {
             if index < runs.count - 1 {
                 let spaceAttributes: [NSAttributedString.Key: Any] = [
                     kCTFontAttributeName as NSAttributedString.Key: baseFont,
-                    kCTForegroundColorAttributeName as NSAttributedString.Key: color,
+                    kCTForegroundColorAttributeName as NSAttributedString.Key: style.foregroundColor,
                 ]
                 result.append(NSAttributedString(string: "\u{2009}", attributes: spaceAttributes))
             }

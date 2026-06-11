@@ -30,16 +30,16 @@ public actor AXTextCapture: TextCapturing {
     // MARK: - TextCapturing
 
     public func captureText(at point: CGPoint) async -> CapturedText? {
-        // ── 1. Fetch screen height on the MainActor ───────────────────────
+        // ── 1. Fetch the flip reference height on the MainActor ───────────
+        // The Cocoa↔CG/AX y-flip pivots on the *primary* screen's top edge — the
+        // screen whose frame origin is (0,0), which carries the menu bar — NOT the
+        // union of all screens. Using the union height injects a constant vertical
+        // offset equal to however far a secondary display overhangs above/below the
+        // primary, which silently misplaces every hit-test on multi-display setups.
         let globalHeight: CGFloat = await MainActor.run {
-            // Use the full virtual-desktop height (union of all screens) so that
-            // conversion is consistent on multi-monitor setups.  Fall back to the
-            // main screen height if screens list is empty (unlikely but defensive).
             let screens = NSScreen.screens
-            if screens.isEmpty {
-                return NSScreen.main?.frame.height ?? 800
-            }
-            return screens.reduce(CGRect.zero) { $0.union($1.frame) }.height
+            let primary = screens.first(where: { $0.frame.origin == .zero }) ?? screens.first
+            return primary?.frame.height ?? NSScreen.main?.frame.height ?? 800
         }
 
         // ── 2. Convert AppKit bottom-left → AX top-left ───────────────────
@@ -58,172 +58,143 @@ public actor AXTextCapture: TextCapturing {
             Float(axPoint.y),
             &rawElement
         )
+        DebugLog.log("capture: appkit=(\(Int(point.x)),\(Int(point.y))) ax=(\(Int(axPoint.x)),\(Int(axPoint.y))) H=\(Int(globalHeight)) elementErr=\(elementErr.rawValue)")
         guard elementErr == .success, let element = rawElement else { return nil }
+
+        if DebugLog.enabled {
+            var roleRaw: CFTypeRef?
+            AXUIElementCopyAttributeValue(element, "AXRole" as CFString, &roleRaw)
+            let role = (roleRaw as? String) ?? "?"
+            var attrs: CFArray?
+            AXUIElementCopyAttributeNames(element, &attrs)
+            var params: CFArray?
+            AXUIElementCopyParameterizedAttributeNames(element, &params)
+            let attrList = ((attrs as? [String]) ?? []).joined(separator: ",")
+            let paramList = ((params as? [String]) ?? []).joined(separator: ",")
+            DebugLog.log("capture: role=\(role)\n  attrs=[\(attrList)]\n  params=[\(paramList)]")
+        }
 
         // Apply per-element timeout as well (the element may be in a different process).
         AXUIElementSetMessagingTimeout(element, axTimeout)
 
         // ── 4. Extract text ───────────────────────────────────────────────
-        return extractText(from: element, axPoint: axPoint, globalHeight: globalHeight)
+        let result = extractText(from: element, axPoint: axPoint, globalHeight: globalHeight)
+        DebugLog.log("capture: result=\(result == nil ? "nil" : "len=\(result!.text.count) source=\(result!.source)")")
+        return result
     }
 
     // MARK: - Private helpers
 
-    /// Tries the full parameterised-attribute path first, then falls back to
-    /// whole-value attributes for elements that do not support range queries.
+    /// Upper bound on a plausible `AXRangeForPosition` length. The attribute is meant to
+    /// return the single character under the point (length 1); some elements return a
+    /// word. Anything larger (notably the `~Int64.max` garbage some controls emit) is a
+    /// bug and is rejected so we never capture a whole line/document.
+    private static let maxCursorRangeLength = 64
+    /// Half-width (in UTF-16 units) of the text window fetched around the cursor for
+    /// word-boundary expansion.
+    private static let wordWindowRadius = 40
+
+    /// Extracts the *word* under the cursor using only the parameterised range APIs that
+    /// reliably localise a position:
+    ///   AXRangeForPosition(point) → cursor index → word range (CFStringTokenizer)
+    ///   → AXBoundsForRange(word)  → screen rect
+    ///
+    /// Returns `nil` for elements that do not support position→index/bounds mapping
+    /// (e.g. NSTextView/`AXTextArea`, WebKit text). Those are handled by the OCR
+    /// fallback in the capture orchestrator — there is deliberately no whole-`AXValue`
+    /// fallback here, which would dump an entire line/field instead of a single word.
     private func extractText(
         from element: AXUIElement,
         axPoint: CGPoint,
         globalHeight: CGFloat
     ) -> CapturedText? {
-        // Primary path: RangeForPosition → StringForRange + BoundsForRange
-        if let result = extractViaRangeAttributes(
-            from: element, axPoint: axPoint, globalHeight: globalHeight
-        ) {
-            return result
+        // 1. Cursor character index from the hovered point.
+        guard let cursor = cursorRange(in: element, axPoint: axPoint) else { return nil }
+
+        // 2. Expand the cursor index to the surrounding word.
+        let wordRange = expandToWord(in: element, cursor: cursor)
+
+        // 3. Word text (local slice of the fetched window when available, else AX).
+        guard let text = string(for: wordRange, in: element), !text.isEmpty else { return nil }
+
+        // 4. Screen rect for the word — required (no rect ⇒ cannot place the overlay).
+        guard let appKitRect = bounds(for: wordRange, in: element, globalHeight: globalHeight) else {
+            DebugLog.log("ax: no bounds for word range → defer to OCR")
+            return nil
         }
 
-        // Fallback A: kAXSelectedTextAttribute (non-nil when the user has a selection)
-        if let result = extractViaAttribute(
-            "AXSelectedText", from: element,
-            approximatePoint: axPoint, globalHeight: globalHeight
-        ) {
-            return result
-        }
-
-        // Fallback B: kAXValueAttribute (whole field value — common in text fields)
-        if let result = extractViaAttribute(
-            "AXValue", from: element,
-            approximatePoint: axPoint, globalHeight: globalHeight
-        ) {
-            return result
-        }
-
-        return nil
+        return CapturedText(rawText: text, screenRect: appKitRect, source: .accessibility)
     }
 
-    /// Parameterised-attribute path:
-    ///   AXRangeForPosition(axPoint) → CFRange
-    ///   AXStringForRange(range)     → String
-    ///   AXBoundsForRange(range)     → CGRect (AX top-left)
-    private func extractViaRangeAttributes(
-        from element: AXUIElement,
-        axPoint: CGPoint,
-        globalHeight: CGFloat
-    ) -> CapturedText? {
-        // Step 4a: encode the AX point as an AXValue and ask for the range.
+    /// `AXRangeForPosition` → validated single-character `CFRange`, or `nil`.
+    private func cursorRange(in element: AXUIElement, axPoint: CGPoint) -> CFRange? {
         var mutablePoint = axPoint
         guard let pointValue = AXValueCreate(.cgPoint, &mutablePoint) else { return nil }
 
-        var rawRange: CFTypeRef?
-        let rangeErr = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            "AXRangeForPosition" as CFString,
-            pointValue,
-            &rawRange
+        var raw: CFTypeRef?
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element, "AXRangeForPosition" as CFString, pointValue, &raw
         )
-        guard rangeErr == .success, let rangeValue = rawRange else { return nil }
-        // The returned value is an AXValue wrapping a CFRange.
-        var cfRange = CFRange(location: 0, length: 0)
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &cfRange),
-              cfRange.length > 0 else { return nil }
+        DebugLog.log("ax: AXRangeForPosition err=\(err.rawValue)")
+        guard err == .success, let value = raw else { return nil }
 
-        // Step 4b: encode the CFRange and fetch the string.
-        guard let rangeAXValue = AXValueCreate(.cfRange, &cfRange) else { return nil }
+        var range = CFRange(location: 0, length: 0)
+        guard AXValueGetValue(value as! AXValue, .cfRange, &range) else { return nil }
 
-        var rawString: CFTypeRef?
-        let stringErr = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            "AXStringForRange" as CFString,
-            rangeAXValue,
-            &rawString
-        )
-        guard stringErr == .success,
-              let cfString = rawString,
-              CFGetTypeID(cfString) == CFStringGetTypeID() else { return nil }
-        let text = cfString as! String
-        guard !text.isEmpty else { return nil }
-
-        // Step 4c: fetch the bounding rect (AX top-left coords).
-        var rawBounds: CFTypeRef?
-        let boundsErr = AXUIElementCopyParameterizedAttributeValue(
-            element,
-            "AXBoundsForRange" as CFString,
-            rangeAXValue,
-            &rawBounds
-        )
-
-        let appKitRect: CGRect
-        if boundsErr == .success,
-           let boundsValue = rawBounds {
-            var axRect = CGRect.zero
-            if AXValueGetValue(boundsValue as! AXValue, .cgRect, &axRect) {
-                // Convert AX top-left rect → AppKit bottom-left rect.
-                appKitRect = converter.axRectToAppKit(axRect, globalHeight: globalHeight)
-            } else {
-                appKitRect = fallbackRect(for: axPoint, globalHeight: globalHeight)
-            }
-        } else {
-            appKitRect = fallbackRect(for: axPoint, globalHeight: globalHeight)
+        // Reject implausible ranges (negative, zero, or the ~Int64.max garbage).
+        guard range.location >= 0,
+              range.length > 0,
+              range.length <= Self.maxCursorRangeLength else {
+            DebugLog.log("ax: reject range loc=\(range.location) len=\(range.length)")
+            return nil
         }
-
-        return CapturedText(rawText: text, screenRect: appKitRect, source: .accessibility)
+        return range
     }
 
-    /// Simple attribute fallback for `AXSelectedText` / `AXValue`.
-    /// Bounds are approximated from the element's `AXFrame` if available.
-    private func extractViaAttribute(
-        _ attribute: String,
-        from element: AXUIElement,
-        approximatePoint axPoint: CGPoint,
-        globalHeight: CGFloat
-    ) -> CapturedText? {
-        var rawValue: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(
-            element,
-            attribute as CFString,
-            &rawValue
-        )
-        guard err == .success,
-              let cfValue = rawValue,
-              CFGetTypeID(cfValue) == CFStringGetTypeID() else { return nil }
-        let text = cfValue as! String
-        guard !text.isEmpty else { return nil }
+    /// Expands a cursor `CFRange` to the word that contains it, using a bounded text
+    /// window fetched via `AXStringForRange` and the shared `ja_JP` tokenizer. Falls back
+    /// to the original cursor range if the window or tokenizer is unavailable.
+    private func expandToWord(in element: AXUIElement, cursor: CFRange) -> CFRange {
+        let winLoc = max(0, cursor.location - Self.wordWindowRadius)
+        let winLen = (cursor.location - winLoc) + Self.wordWindowRadius
+        let windowRange = CFRange(location: winLoc, length: winLen)
 
-        // Try to read the element's frame for a proper rect.
-        let appKitRect = elementAppKitFrame(of: element, globalHeight: globalHeight)
-            ?? fallbackRect(for: axPoint, globalHeight: globalHeight)
-
-        return CapturedText(rawText: text, screenRect: appKitRect, source: .accessibility)
+        guard let window = string(for: windowRange, in: element), !window.isEmpty else {
+            return cursor
+        }
+        let indexInWindow = cursor.location - winLoc
+        guard let local = WordBoundary.wordRange(in: window, utf16Index: indexInWindow) else {
+            return cursor
+        }
+        let absolute = CFRange(location: winLoc + local.location, length: local.length)
+        DebugLog.log("ax: word range loc=\(absolute.location) len=\(absolute.length)")
+        return absolute
     }
 
-    /// Reads `AXFrame` from the element and converts to AppKit coordinates.
-    private func elementAppKitFrame(
-        of element: AXUIElement,
-        globalHeight: CGFloat
-    ) -> CGRect? {
-        var rawFrame: CFTypeRef?
-        let err = AXUIElementCopyAttributeValue(
-            element,
-            "AXFrame" as CFString,
-            &rawFrame
+    /// `AXStringForRange(range)` → `String`.
+    private func string(for range: CFRange, in element: AXUIElement) -> String? {
+        var mutable = range
+        guard let rangeValue = AXValueCreate(.cfRange, &mutable) else { return nil }
+        var raw: CFTypeRef?
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element, "AXStringForRange" as CFString, rangeValue, &raw
         )
-        guard err == .success, let frameValue = rawFrame else { return nil }
+        guard err == .success, let cf = raw, CFGetTypeID(cf) == CFStringGetTypeID() else { return nil }
+        return (cf as! String)
+    }
+
+    /// `AXBoundsForRange(range)` → AppKit rect (converted from AX top-left coords).
+    private func bounds(for range: CFRange, in element: AXUIElement, globalHeight: CGFloat) -> CGRect? {
+        var mutable = range
+        guard let rangeValue = AXValueCreate(.cfRange, &mutable) else { return nil }
+        var raw: CFTypeRef?
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element, "AXBoundsForRange" as CFString, rangeValue, &raw
+        )
+        guard err == .success, let value = raw else { return nil }
         var axRect = CGRect.zero
-        guard AXValueGetValue(frameValue as! AXValue, .cgRect, &axRect) else { return nil }
+        guard AXValueGetValue(value as! AXValue, .cgRect, &axRect),
+              axRect.width > 0, axRect.height > 0 else { return nil }
         return converter.axRectToAppKit(axRect, globalHeight: globalHeight)
-    }
-
-    /// When no bounds are available, return a small rect centred on the cursor
-    /// (already in AppKit coordinates).
-    private func fallbackRect(for axPoint: CGPoint, globalHeight: CGFloat) -> CGRect {
-        let appKitPoint = converter.axToAppKit(axPoint, globalHeight: globalHeight)
-        let side: CGFloat = 20
-        return CGRect(
-            x: appKitPoint.x - side / 2,
-            y: appKitPoint.y - side / 2,
-            width: side,
-            height: side
-        )
     }
 }

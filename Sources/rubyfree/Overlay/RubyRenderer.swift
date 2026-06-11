@@ -24,8 +24,8 @@ final class RubyRenderer: NSView {
     /// Padding below the text baseline to the panel bottom.
     private static let vPadBottom: CGFloat = 8
     /// Padding above the text top to the panel top.  Extra space lets ruby glyphs
-    /// sit fully inside the panel; ruby is typically ~50 % the base glyph height.
-    private static let vPadTop: CGFloat = 20
+    /// (plus the lifted ruby gap) sit fully inside the panel.
+    private static let vPadTop: CGFloat = 26
     /// Corner radius for the backdrop rectangle.
     private static let cornerRadius: CGFloat = 8
 
@@ -65,13 +65,16 @@ final class RubyRenderer: NSView {
         let bounds = self.bounds
 
         // --- Backdrop ---
-        // Use windowBackgroundColor so the panel tracks dark/light mode automatically.
-        let backdrop = NSColor.windowBackgroundColor.withAlphaComponent(0.85)
-        backdrop.setFill()
+        // A dark, near-opaque chip so the bright furigana reads clearly regardless of
+        // what is behind it on screen (the captured app may be light or dark).
         let path = NSBezierPath(roundedRect: bounds,
                                 xRadius: Self.cornerRadius,
                                 yRadius: Self.cornerRadius)
+        NSColor(white: 0.08, alpha: 0.92).setFill()
         path.fill()
+        NSColor(white: 1.0, alpha: 0.18).setStroke()
+        path.lineWidth = 1
+        path.stroke()
 
         // --- Text ---
         guard let attributed else { return }

@@ -16,7 +16,23 @@ let permissions = AXPermissionChecker()
 permissions.requestAccessibility()
 
 let useFake = ProcessInfo.processInfo.environment["RUBYFREE_FAKE_CAPTURE"] != nil
-let capture: any TextCapturing = useFake ? FakeTextCapture() : AXTextCapture()
+
+// OCR fallback handles apps where AX cannot localize the word under the cursor
+// (NSTextView/TextEdit, WebKit, PDFs). It needs Screen Recording; request it (JIT) and
+// enable the fallback only once granted — a fresh grant takes effect on next launch.
+let ocrCapture = OCRTextCapture()
+let screenRecordingGranted = permissions.current().screenRecording
+if !useFake && !screenRecordingGranted {
+    permissions.requestScreenRecording()
+}
+let ocrEnabled = !useFake && screenRecordingGranted
+if ocrEnabled {
+    Task { await ocrCapture.prewarm() }
+}
+
+let capture: any TextCapturing = useFake
+    ? FakeTextCapture()
+    : TextCaptureStrategy(primary: AXTextCapture(), fallback: ocrEnabled ? ocrCapture : nil)
 let secureDetector: any SecureFieldDetecting = useFake ? NoSecureFieldDetector() : AXSecureFieldDetector()
 
 let coordinator = AppCoordinator(
@@ -40,6 +56,19 @@ let axStatus = NSMenuItem(
 )
 axStatus.isEnabled = false
 menu.addItem(axStatus)
+if !useFake {
+    let ocrLabel: String
+    if ocrEnabled {
+        ocrLabel = "OCR フォールバック: 有効 ✓"
+    } else if screenRecordingGranted {
+        ocrLabel = "OCR フォールバック: 無効"
+    } else {
+        ocrLabel = "OCR フォールバック: 画面収録の許可が必要（許可後に再起動）"
+    }
+    let ocrStatus = NSMenuItem(title: ocrLabel, action: nil, keyEquivalent: "")
+    ocrStatus.isEnabled = false
+    menu.addItem(ocrStatus)
+}
 if useFake {
     let fake = NSMenuItem(title: "（FAKE_CAPTURE モード）", action: nil, keyEquivalent: "")
     fake.isEnabled = false
