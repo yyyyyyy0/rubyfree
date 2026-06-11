@@ -103,6 +103,7 @@ private struct SettingsFormView: View {
             fontSizeSection
             maxReadingsSection
             settleDelaySection
+            ThemePickerView(coordinator: coordinator)
             CustomThemeEditorView(coordinator: coordinator)
             if coordinator.canEditUserDictionary {
                 UserDictionaryEditorView(coordinator: coordinator)

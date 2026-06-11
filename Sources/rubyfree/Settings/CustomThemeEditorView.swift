@@ -33,6 +33,8 @@ struct CustomThemeEditorView: View {
     @State private var chipBgRGB:    Color = .black   // RGB only; alpha controlled by slider
     @State private var chipStroke:   Color = Color(white: 1.0).opacity(0.18)
     @State private var opacity:      Double = 0.92    // chip background alpha (0…1)
+    /// Transient "保存しました" confirmation, shown briefly after a save.
+    @State private var justSaved = false
 
     var body: some View {
         Section("カスタムテーマ") {
@@ -56,7 +58,17 @@ struct CustomThemeEditorView: View {
                 Button("保存") { save() }
                     .buttonStyle(.borderedProminent)
                 Button("リセット") { seedFromCoordinator() }
+                Spacer()
+                if justSaved {
+                    Label("保存しました", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .font(.callout)
+                        .transition(.opacity)
+                }
             }
+            Text("保存するとメニューの「テーマ」が「カスタム」に切り替わり、次のホバーから反映されます。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
         .onAppear { seedFromCoordinator() }
     }
@@ -85,10 +97,15 @@ struct CustomThemeEditorView: View {
         chipStroke = color(from: base.chipStrokeColor)
     }
 
-    /// Compose the current buffer state into a ``RubyTheme`` and save it via the coordinator.
+    /// Compose the current buffer state into a ``RubyTheme`` and save it via the coordinator,
+    /// then flash a confirmation so the user knows it took (there is no live preview).
     private func save() {
-        let custom = buildTheme()
-        coordinator.setCustomTheme(custom)
+        coordinator.setCustomTheme(buildTheme())
+        withAnimation { justSaved = true }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            withAnimation { justSaved = false }
+        }
     }
 
     /// Build a ``RubyTheme`` from the current buffers. Chip background merges the RGB colour
