@@ -26,6 +26,21 @@ final class MenuController: NSObject, NSMenuDelegate {
     /// One radio item per preset, keyed by theme id, so `refresh()` can tick the active one.
     private var themeItems: [String: NSMenuItem] = [:]
 
+    // Staged display/behaviour selectors (interim until the Settings window, #16). Each is a
+    // submenu of radio items; `refresh()` ticks the one matching the coordinator's value.
+    private let fontSizeItem    = NSMenuItem(title: "文字サイズ", action: nil, keyEquivalent: "")
+    private let maxReadingsItem = NSMenuItem(title: "ルビ候補数", action: nil, keyEquivalent: "")
+    private let settleItem      = NSMenuItem(title: "反応の速さ", action: nil, keyEquivalent: "")
+    private var fontSizeItems: [Int: NSMenuItem] = [:]
+    private var maxReadingsItems: [Int: NSMenuItem] = [:]
+    /// Settle-delay options keyed by an integer of milliseconds (avoids Double dictionary keys).
+    private var settleItems: [Int: NSMenuItem] = [:]
+
+    private static let fontSizeOptions: [(String, Int)] = [("小", 18), ("中", 22), ("大", 28), ("特大", 32)]
+    private static let maxReadingsOptions: [(String, Int)] = [("1", 1), ("2", 2), ("3", 3), ("4", 4)]
+    /// (label, seconds). Keyed in the map by `Int(seconds*1000)`.
+    private static let settleOptions: [(String, Double)] = [("速い", 0.2), ("標準", 0.35), ("ゆっくり", 0.6)]
+
     init(coordinator: AppCoordinator,
          permissions: AXPermissionChecker,
          statusItem: NSStatusItem,
@@ -62,6 +77,10 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         buildThemeSubmenu()
         menu.addItem(themeItem)
+        buildDisplaySubmenus()
+        menu.addItem(fontSizeItem)
+        menu.addItem(maxReadingsItem)
+        menu.addItem(settleItem)
         menu.addItem(.separator())
         let about = NSMenuItem(title: "rubyfree について…",
                                action: #selector(showAbout), keyEquivalent: "")
@@ -90,6 +109,35 @@ final class MenuController: NSObject, NSMenuDelegate {
             themeItems[preset.id] = item
         }
         themeItem.submenu = submenu
+    }
+
+    /// Build the interim "文字サイズ / ルビ候補数 / 反応の速さ" submenus (staged radio items).
+    private func buildDisplaySubmenus() {
+        fontSizeItem.submenu = radioSubmenu(
+            Self.fontSizeOptions.map { ($0.0, $0.1) },
+            action: #selector(selectFontSize(_:)), into: &fontSizeItems)
+        maxReadingsItem.submenu = radioSubmenu(
+            Self.maxReadingsOptions.map { ($0.0, $0.1) },
+            action: #selector(selectMaxReadings(_:)), into: &maxReadingsItems)
+        settleItem.submenu = radioSubmenu(
+            Self.settleOptions.map { ($0.0, Int($0.1 * 1000)) },
+            action: #selector(selectSettle(_:)), into: &settleItems)
+    }
+
+    /// Make a submenu of radio items from (label, Int value) pairs. The value is stored as
+    /// `representedObject` and the item is registered in `map` keyed by value for `refresh()`.
+    private func radioSubmenu(_ options: [(String, Int)],
+                              action: Selector,
+                              into map: inout [Int: NSMenuItem]) -> NSMenu {
+        let submenu = NSMenu()
+        for (label, value) in options {
+            let item = NSMenuItem(title: label, action: action, keyEquivalent: "")
+            item.target = self
+            item.representedObject = value
+            submenu.addItem(item)
+            map[value] = item
+        }
+        return submenu
     }
 
     // MARK: - NSMenuDelegate
@@ -121,9 +169,18 @@ final class MenuController: NSObject, NSMenuDelegate {
         for (id, item) in themeItems {
             item.state = (id == activeThemeID) ? .on : .off
         }
+        // Tick the active display/behaviour selectors.
+        tick(fontSizeItems, active: coordinator.currentFontSize)
+        tick(maxReadingsItems, active: coordinator.currentMaxReadings)
+        tick(settleItems, active: Int(coordinator.currentSettleDelay * 1000))
 
         // Dim the menu-bar glyph when turned off, as a passive on/off cue.
         statusItem.button?.appearsDisabled = !enabled
+    }
+
+    /// Tick exactly the radio item whose value equals `active`.
+    private func tick(_ items: [Int: NSMenuItem], active: Int) {
+        for (value, item) in items { item.state = (value == active) ? .on : .off }
     }
 
     // MARK: - Actions
@@ -136,6 +193,24 @@ final class MenuController: NSObject, NSMenuDelegate {
     @objc private func selectTheme(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? String else { return }
         coordinator.setTheme(id: id)
+        refresh()
+    }
+
+    @objc private func selectFontSize(_ sender: NSMenuItem) {
+        guard let points = sender.representedObject as? Int else { return }
+        coordinator.setFontSize(points)
+        refresh()
+    }
+
+    @objc private func selectMaxReadings(_ sender: NSMenuItem) {
+        guard let count = sender.representedObject as? Int else { return }
+        coordinator.setMaxReadings(count)
+        refresh()
+    }
+
+    @objc private func selectSettle(_ sender: NSMenuItem) {
+        guard let ms = sender.representedObject as? Int else { return }
+        coordinator.setSettleDelay(Double(ms) / 1000)
         refresh()
     }
 

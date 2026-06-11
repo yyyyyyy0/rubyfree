@@ -25,7 +25,7 @@ final class AppCoordinator {
 
     private let hover: HoverReducer
     private let stateReducer: AppStateReducer
-    private let settleDelay: TimeInterval
+    private var settleDelay: TimeInterval
     private let permissionPollInterval: TimeInterval
 
     private var hoverState = HoverState()
@@ -86,29 +86,57 @@ final class AppCoordinator {
 
     func start() {
         monitor.onMove = { [weak self] point in self?.handleMoved(point) }
-        // Restore the persisted theme before any overlay is shown, then the on/off
-        // preference. Finally start watching for permission changes (grants/revocations)
+        // Restore persisted display/behaviour settings before any overlay is shown, then the
+        // on/off preference. Finally start watching for permission changes (grants/revocations)
         // even while disabled so the menu stays accurate.
+        settleDelay = settings.settleDelay
         applyTheme(RubyTheme.preset(id: settings.themeID), persist: false)
         setEnabled(settings.isEnabled)
         startPermissionPolling()
     }
 
-    // MARK: - Theme
+    // MARK: - Theme / display settings
 
     /// Identifier of the active theme (for the menu's radio selection).
     var currentThemeID: String { theme.id }
+    /// Current display/behaviour settings (for the menu's radio selection).
+    var currentFontSize: Int { settings.fontSize }
+    var currentMaxReadings: Int { settings.maxReadings }
+    var currentSettleDelay: Double { settings.settleDelay }
 
     /// Switch to the theme with `id` (unknown ids fall back to the default) and persist it.
     func setTheme(id: String) {
         applyTheme(RubyTheme.preset(id: id), persist: true)
     }
 
+    /// Persist a new base font size and rebuild the style so the next hover uses it.
+    func setFontSize(_ points: Int) {
+        settings.fontSize = points
+        rebuildStyle()
+        overlay.hide()
+        onStateChange?()
+    }
+
+    /// Persist a new max-readings cap and rebuild the style.
+    func setMaxReadings(_ count: Int) {
+        settings.maxReadings = count
+        rebuildStyle()
+        overlay.hide()
+        onStateChange?()
+    }
+
+    /// Persist a new hover-settle delay. Picked up on the next `armSettleTimer` (live).
+    func setSettleDelay(_ seconds: Double) {
+        settings.settleDelay = seconds
+        settleDelay = settings.settleDelay
+        onStateChange?()
+    }
+
     /// Set the active theme: derive the body ``RubyStyle``, push chip colours to the overlay,
     /// optionally persist the choice, and notify the UI so the menu refreshes its selection.
     private func applyTheme(_ newTheme: RubyTheme, persist: Bool) {
         theme = newTheme
-        style = newTheme.makeStyle()
+        rebuildStyle()
         if persist { settings.themeID = newTheme.id }
         overlay.applyTheme(newTheme)
         // Clear any chip currently on screen so we never show a half-themed overlay: chip
@@ -117,6 +145,12 @@ final class AppCoordinator {
         // — the next hover re-renders fully in the new theme. (No-op when nothing is shown.)
         overlay.hide()
         onStateChange?()
+    }
+
+    /// Rebuild ``style`` from the active theme and the persisted font/readings settings.
+    /// Side-effect-free; callers hide the overlay and notify as appropriate.
+    private func rebuildStyle() {
+        style = theme.makeStyle(fontSize: CGFloat(settings.fontSize), maxReadings: settings.maxReadings)
     }
 
     /// Turn hovering on/off. Persists the preference, drives the state machine, and

@@ -36,5 +36,32 @@ func testSettingsStore(_ t: TinyTest) {
     let themeReopened = UserDefaultsSettingsStore(defaults: defaults)
     t.expectEqual(themeReopened.themeID, RubyTheme.highContrast.id)
 
+    // 6. Numeric display/behaviour settings: defaults when absent.
+    t.expectEqual(again.fontSize, SettingsBounds.fontSizeDefault)
+    t.expectEqual(again.maxReadings, SettingsBounds.maxReadingsDefault)
+    t.expectEqual(again.settleDelay, SettingsBounds.settleDelayDefault)
+    t.expectEqual(again.schemaVersion, SettingsBounds.currentSchemaVersion)
+
+    // 7. Writes persist and round-trip.
+    again.fontSize = 28
+    again.maxReadings = 2
+    again.settleDelay = 0.6
+    let numReopened = UserDefaultsSettingsStore(defaults: defaults)
+    t.expectEqual(numReopened.fontSize, 28)
+    t.expectEqual(numReopened.maxReadings, 2)
+    t.expectTrue(abs(numReopened.settleDelay - 0.6) < 1e-9, "settleDelay round-trips")
+
+    // 8. Out-of-range writes are clamped to bounds (no broken overlay from a stale value).
+    again.fontSize = 999
+    t.expectEqual(again.fontSize, SettingsBounds.fontSize.upperBound)
+    again.fontSize = 1
+    t.expectEqual(again.fontSize, SettingsBounds.fontSize.lowerBound)
+    again.maxReadings = 99
+    t.expectEqual(again.maxReadings, SettingsBounds.maxReadings.upperBound)
+    again.settleDelay = 5.0
+    t.expectTrue(again.settleDelay <= SettingsBounds.settleDelay.upperBound, "settleDelay clamped high")
+    again.settleDelay = 0.0
+    t.expectTrue(again.settleDelay >= SettingsBounds.settleDelay.lowerBound, "settleDelay clamped low")
+
     defaults.removePersistentDomain(forName: suite)
 }

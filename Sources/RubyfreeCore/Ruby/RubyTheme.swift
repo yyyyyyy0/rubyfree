@@ -52,13 +52,17 @@ public struct RubyTheme: Sendable {
         self.chipStrokeColor = chipStrokeColor
     }
 
-    /// Derive a ``RubyStyle`` from this theme's text colours, keeping ``RubyStyle``'s other
-    /// defaults (font, sizes, ruby gap, max readings) untouched.
-    public func makeStyle() -> RubyStyle {
+    /// Derive a ``RubyStyle`` from this theme's text colours. `fontSize` and `maxReadings`
+    /// can be overridden (from user settings); both default to ``RubyStyle``'s own defaults
+    /// so `makeStyle()` reproduces the original style. Other ``RubyStyle`` fields (font name,
+    /// ruby scale/gap) keep their defaults.
+    public func makeStyle(fontSize: CGFloat = 22, maxReadings: Int = 3) -> RubyStyle {
         RubyStyle(
+            fontSize: fontSize,
             foregroundColor: foregroundColor,
             rubyColor: rubyColor,
-            uncertainColor: uncertainColor
+            uncertainColor: uncertainColor,
+            maxReadings: maxReadings
         )
     }
 }
