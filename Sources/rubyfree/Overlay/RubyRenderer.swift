@@ -35,6 +35,24 @@ final class RubyRenderer: NSView {
         didSet { needsDisplay = true }
     }
 
+    /// Fill colour of the backdrop chip. Defaults mirror `RubyTheme.dark`'s chip so the
+    /// renderer looks correct in the brief window before the coordinator pushes the selected
+    /// theme's colours on launch via `applyChipColors`. Keep in sync with `RubyTheme.dark`.
+    private var chipBackgroundColor: NSColor = NSColor(white: 0.08, alpha: 0.92) {
+        didSet { needsDisplay = true }
+    }
+    /// Stroke (border) colour of the backdrop chip. Mirrors `RubyTheme.dark`'s chip stroke.
+    private var chipStrokeColor: NSColor = NSColor(white: 1.0, alpha: 0.18) {
+        didSet { needsDisplay = true }
+    }
+
+    /// Apply the chip colours from the selected theme. Falls back to the existing colour if
+    /// a `CGColor` can't be bridged to `NSColor` (e.g. an unexpected colour space).
+    func applyChipColors(background: CGColor, stroke: CGColor) {
+        chipBackgroundColor = NSColor(cgColor: background) ?? chipBackgroundColor
+        chipStrokeColor = NSColor(cgColor: stroke) ?? chipStrokeColor
+    }
+
     // MARK: Coordinate system
 
     /// Use a flipped coordinate system so (0,0) is the top-left corner, which makes
@@ -65,14 +83,15 @@ final class RubyRenderer: NSView {
         let bounds = self.bounds
 
         // --- Backdrop ---
-        // A dark, near-opaque chip so the bright furigana reads clearly regardless of
-        // what is behind it on screen (the captured app may be light or dark).
+        // A near-opaque chip so the furigana reads clearly regardless of what is behind it
+        // on screen (the captured app may be light or dark). Colours come from the selected
+        // theme via `applyChipColors`.
         let path = NSBezierPath(roundedRect: bounds,
                                 xRadius: Self.cornerRadius,
                                 yRadius: Self.cornerRadius)
-        NSColor(white: 0.08, alpha: 0.92).setFill()
+        chipBackgroundColor.setFill()
         path.fill()
-        NSColor(white: 1.0, alpha: 0.18).setStroke()
+        chipStrokeColor.setStroke()
         path.lineWidth = 1
         path.stroke()
 

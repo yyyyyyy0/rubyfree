@@ -1,4 +1,5 @@
 import AppKit
+import RubyfreeCore
 import RubyfreeSystem
 
 /// Owns the menu-bar `NSStatusItem` and its menu: an on/off toggle, live permission
@@ -21,6 +22,9 @@ final class MenuController: NSObject, NSMenuDelegate {
     private let axOpen      = NSMenuItem(title: "アクセシビリティを設定で開く…", action: nil, keyEquivalent: "")
     private let ocrStatus   = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let screenOpen  = NSMenuItem(title: "画面収録を設定で開く…", action: nil, keyEquivalent: "")
+    private let themeItem   = NSMenuItem(title: "テーマ", action: nil, keyEquivalent: "")
+    /// One radio item per preset, keyed by theme id, so `refresh()` can tick the active one.
+    private var themeItems: [String: NSMenuItem] = [:]
 
     init(coordinator: AppCoordinator,
          permissions: AXPermissionChecker,
@@ -56,6 +60,9 @@ final class MenuController: NSObject, NSMenuDelegate {
             menu.addItem(f)
         }
         menu.addItem(.separator())
+        buildThemeSubmenu()
+        menu.addItem(themeItem)
+        menu.addItem(.separator())
         menu.addItem(withTitle: "rubyfree を終了",
                      action: #selector(NSApplication.terminate(_:)),
                      keyEquivalent: "q")
@@ -63,6 +70,22 @@ final class MenuController: NSObject, NSMenuDelegate {
         menu.delegate = self
         statusItem.button?.title = "る"
         statusItem.menu = menu
+    }
+
+    /// Build the "テーマ" submenu: one radio item per ``RubyTheme`` preset. Selecting an item
+    /// drives `coordinator.setTheme(id:)`; the active one is ticked in `refresh()`.
+    private func buildThemeSubmenu() {
+        let submenu = NSMenu()
+        for preset in RubyTheme.allPresets {
+            let item = NSMenuItem(title: preset.name,
+                                  action: #selector(selectTheme(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.representedObject = preset.id
+            submenu.addItem(item)
+            themeItems[preset.id] = item
+        }
+        themeItem.submenu = submenu
     }
 
     // MARK: - NSMenuDelegate
@@ -89,6 +112,12 @@ final class MenuController: NSObject, NSMenuDelegate {
             screenOpen.isHidden = p.screenRecording
         }
 
+        // Tick the active theme's radio item.
+        let activeThemeID = coordinator.currentThemeID
+        for (id, item) in themeItems {
+            item.state = (id == activeThemeID) ? .on : .off
+        }
+
         // Dim the menu-bar glyph when turned off, as a passive on/off cue.
         statusItem.button?.appearsDisabled = !enabled
     }
@@ -97,6 +126,12 @@ final class MenuController: NSObject, NSMenuDelegate {
 
     @objc private func toggleEnabled() {
         coordinator.setEnabled(!coordinator.isEnabled)
+        refresh()
+    }
+
+    @objc private func selectTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String else { return }
+        coordinator.setTheme(id: id)
         refresh()
     }
 

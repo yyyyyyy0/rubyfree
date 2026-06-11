@@ -1,4 +1,5 @@
 import AppKit
+import RubyfreeCore
 
 /// Shows / hides the ruby overlay. AppCoordinator (composition root) depends on this
 /// abstraction; OverlayWindowController implements it with a transparent, click-through
@@ -9,4 +10,7 @@ protocol OverlayPresenting: AnyObject {
     /// (AppKit global, bottom-left, points).
     func show(_ attributed: NSAttributedString, at screenRect: CGRect)
     func hide()
+    /// Apply the selected theme's chip colours to the overlay. Text colours are baked into
+    /// the attributed string by the caller; this carries only the chip (background/stroke).
+    func applyTheme(_ theme: RubyTheme)
 }

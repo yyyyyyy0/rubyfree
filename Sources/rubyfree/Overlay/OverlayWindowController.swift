@@ -1,4 +1,5 @@
 import AppKit
+import RubyfreeCore
 
 // MARK: - OverlayWindowController
 
@@ -136,5 +137,12 @@ final class OverlayWindowController: OverlayPresenting {
                 panel?.orderOut(nil)
             }
         })
+    }
+
+    func applyTheme(_ theme: RubyTheme) {
+        renderer.applyChipColors(
+            background: theme.chipBackgroundColor,
+            stroke: theme.chipStrokeColor
+        )
     }
 }

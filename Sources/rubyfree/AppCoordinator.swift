@@ -31,6 +31,11 @@ final class AppCoordinator {
     private var hoverState = HoverState()
     private var appState: AppState = .disabled
     private var generation = 0
+
+    /// The active colour palette and the ``RubyStyle`` derived from it. Loaded from settings
+    /// on `start()`; changed via `setTheme(id:)`.
+    private var theme: RubyTheme = .default
+    private var style: RubyStyle = RubyTheme.default.makeStyle()
     private var settleTimer: Timer?
     private var permissionTimer: Timer?
     private var captureTask: Task<Void, Never>?
@@ -81,10 +86,37 @@ final class AppCoordinator {
 
     func start() {
         monitor.onMove = { [weak self] point in self?.handleMoved(point) }
-        // Restore the persisted on/off preference, then start watching for permission
-        // changes (grants/revocations) even while disabled so the menu stays accurate.
+        // Restore the persisted theme before any overlay is shown, then the on/off
+        // preference. Finally start watching for permission changes (grants/revocations)
+        // even while disabled so the menu stays accurate.
+        applyTheme(RubyTheme.preset(id: settings.themeID), persist: false)
         setEnabled(settings.isEnabled)
         startPermissionPolling()
+    }
+
+    // MARK: - Theme
+
+    /// Identifier of the active theme (for the menu's radio selection).
+    var currentThemeID: String { theme.id }
+
+    /// Switch to the theme with `id` (unknown ids fall back to the default) and persist it.
+    func setTheme(id: String) {
+        applyTheme(RubyTheme.preset(id: id), persist: true)
+    }
+
+    /// Set the active theme: derive the body ``RubyStyle``, push chip colours to the overlay,
+    /// optionally persist the choice, and notify the UI so the menu refreshes its selection.
+    private func applyTheme(_ newTheme: RubyTheme, persist: Bool) {
+        theme = newTheme
+        style = newTheme.makeStyle()
+        if persist { settings.themeID = newTheme.id }
+        overlay.applyTheme(newTheme)
+        // Clear any chip currently on screen so we never show a half-themed overlay: chip
+        // colours apply immediately but the body text colours are baked into the attributed
+        // string and only update on the next capture. Hiding keeps the appearance consistent
+        // — the next hover re-renders fully in the new theme. (No-op when nothing is shown.)
+        overlay.hide()
+        onStateChange?()
     }
 
     /// Turn hovering on/off. Persists the preference, drives the state machine, and
@@ -226,7 +258,7 @@ final class AppCoordinator {
         let runs = composer.compose(analyzer.analyze(captured.text))
         guard !runs.isEmpty else { return failCapture(gen) }
 
-        let attributed = builder.build(runs)
+        let attributed = builder.build(runs, style: style)
         appState = stateReducer.reduce(appState, .captureSucceeded(generation: gen))
         overlay.show(attributed, at: captured.screenRect)
     }

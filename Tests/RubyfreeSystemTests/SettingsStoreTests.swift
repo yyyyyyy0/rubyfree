@@ -1,4 +1,5 @@
 import Foundation
+import RubyfreeCore
 import RubyfreeSystem
 import TinyTest
 
@@ -25,6 +26,15 @@ func testSettingsStore(_ t: TinyTest) {
     reopened.isEnabled = true
     let again = UserDefaultsSettingsStore(defaults: defaults)
     t.expectTrue(again.isEnabled, "re-enabled preference persists")
+
+    // 4. themeID defaults to the default theme on a fresh install.
+    t.expectEqual(again.themeID, RubyTheme.default.id)
+
+    // 5. themeID writes persist and round-trip through a fresh instance.
+    again.themeID = RubyTheme.highContrast.id
+    t.expectEqual(again.themeID, RubyTheme.highContrast.id)
+    let themeReopened = UserDefaultsSettingsStore(defaults: defaults)
+    t.expectEqual(themeReopened.themeID, RubyTheme.highContrast.id)
 
     defaults.removePersistentDomain(forName: suite)
 }
